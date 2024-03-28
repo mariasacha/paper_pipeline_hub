@@ -1,0 +1,11 @@
+
+ bankssts_L	-53.337	-1.9626	24.6372
+ bankssts_R	59.341	1.3851	23.8903
+ caudalanteriorcingulate_L	2.6488	54.7059	48.843
+ caudalanteriorcingulate_R	5.2141	55.594	43.8192
+ caudalmiddlefrontal_L	-32.5895	51.2555	62.6304
+ caudalmiddlefrontal_R	41.6695	51.7289	63.426
+ cuneus_L	-3.5662	-40.1727	40.331
+ cuneus_R	9.6285	-39.8516	35.5051
+ entorhinal_L	-18.2313	28.0582	-14.4782
+
