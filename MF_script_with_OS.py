@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pylab as plt
 from math import erf
+import argparse
 
 
 def TF(P,fexc,finh,adapt, El):
@@ -64,6 +65,20 @@ def OU(tfin):
         x[i] = x[i-1] + dx
     return x
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
+parser.add_argument('--iext', type=float, default=0.3, help='external input - in Hz')
+
+parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
+parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
+parser.add_argument('--time', type=float, default=10, help='Total Time of simulation - in s')
+args = parser.parse_args()
+
+b_e = args.b_e
+Iext = args.iext
+tau_e = args.tau_e
+tau_i = args.tau_e
+TotTime = args.time
 
 #Model parameters
 Gl=10*1.e-9; #leak conductance
@@ -88,19 +103,19 @@ PRS=np.load('RS-cell0_CONFIG1_fit.npy')
 PFS=np.load('FS-cell_CONFIG1_fit.npy')
 
 #Time
-tfinal=10
+tfinal=TotTime
 dt=0.0001
 t = np.linspace(0, tfinal, int(tfinal/dt))
 
 # Additive Noise
-v_drive = 0.2
+v_drive = Iext
 sigma=3.5
 os_noise = sigma*OU(tfinal) + v_drive
 
 #To adjust
-bRS = 5*1e-12 #adaptation 
-Te=5.*1.e-3; #excitatory synaptic decay
-Ti=5*1.e-3; #inhibitory synaptic decay
+bRS = b_e*1e-12 #adaptation 
+Te=tau_e*1.e-3; #excitatory synaptic decay
+Ti=tau_i*1.e-3; #inhibitory synaptic decay
 
 Ele =-64*1e-3 #leak reversal (exc)
 Eli = -65*1e-3 #leak reversal (inh)
@@ -155,10 +170,16 @@ ax2.set_ylabel('mean w (pA)')
 ax3.set_xlabel('Time (s)')
 ax3.set_ylabel('population Firing Rate')
 
+# ask matplotlib for the plotted objects and their labels
+lines, labels = ax2.get_legend_handles_labels()
+lines2, labels2 = ax3.get_legend_handles_labels()
+ax2.legend(lines + lines2, labels + labels2, loc=0)
+
+
 plt.suptitle(sim_name)
 
-ax2.legend()
-ax3.legend()
+# ax2.legend()
+# ax3.legend()
 
 plt.show()
 #f.close()

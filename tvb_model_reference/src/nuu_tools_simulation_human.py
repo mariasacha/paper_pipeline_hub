@@ -92,7 +92,8 @@ def init(parameter_simulation,parameter_model,parameter_connection_between_regio
         connection = lab.connectivity.Connectivity().from_file()
     elif parameter_connection_between_region['from_file']:
         path = parameter_connection_between_region['path']
-        connection = lab.connectivity.Connectivity().from_file(path+'/Connectivity.zip')
+        conn_name = parameter_connection_between_region['conn_name']
+        connection = lab.connectivity.Connectivity().from_file(path+'/' + conn_name)
     elif parameter_connection_between_region['from_h5']:
         connection = lab.connectivity.Connectivity().from_file(parameter_connection_between_region['path'])
     elif parameter_connection_between_region['from_folder']:
@@ -123,7 +124,7 @@ def init(parameter_simulation,parameter_model,parameter_connection_between_regio
                                                 number_of_regions=parameter_connection_between_region['number_of_regions'],
                                                tract_lengths=np.array(parameter_connection_between_region['tract_lengths']),
                                                weights=np.array(parameter_connection_between_region['weights']),
-            region_labels=np.array(parameter_connection_between_region['region_labels']),#TODO need to replace by parameter
+            region_labels=np.arange(0, parameter_connection_between_region['number_of_regions'], 1, dtype='U128'),#TODO need to replace by parameter
             centres=np.arange(0, parameter_connection_between_region['number_of_regions'], 1),#TODO need to replace by parameter
         )
 
@@ -200,7 +201,7 @@ def init(parameter_simulation,parameter_model,parameter_connection_between_regio
         if parameter_integrator['noise_type'] == 'Additive':
             noise = lab.noise.Additive(nsig=np.array(parameter_integrator['noise_parameter']['nsig']),
                                         ntau=parameter_integrator['noise_parameter']['ntau'],)
-            print("type of noise: ", type(noise), "\nand noise: ", noise)
+            # print("type of noise: ", type(noise), "\nand noise: ", noise)
             
         else:
             raise Exception('Bad type for the noise')
@@ -248,7 +249,7 @@ def init(parameter_simulation,parameter_model,parameter_connection_between_regio
 
     #save the parameters in on file
     if not os.path.exists(parameter_simulation['path_result']):
-        os.mkdir(parameter_simulation['path_result'])
+        os.makedirs(parameter_simulation['path_result'])
     f = open(parameter_simulation['path_result']+'/parameter.json',"w")
     f.write("{\n")
     for name,dic in [('parameter_simulation',parameter_simulation),
@@ -334,6 +335,7 @@ def get_result(path,time_begin,time_end, prints=0):
     with open(path + '/parameter.json') as f:
         parameters = json.load(f)
     parameter_simulation = parameters['parameter_simulation']
+    parameter_model = parameters["parameter_model"]
     parameter_monitor = parameters['parameter_monitor']
     count_begin = int(time_begin/parameter_simulation['save_time'])
     count_end = int(time_end/parameter_simulation['save_time'])+1

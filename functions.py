@@ -176,7 +176,7 @@ def plot_raster_meanFR_tau_i(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRate
     # fig.savefig(fol_name + sim_name + '_raster_plot_mean_w' + '.png')
     # plt.close()
 
-def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes):
+def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name):
     
     # fig=figure(figsize=(8,12))
     ax1 = axes[0]
@@ -199,10 +199,11 @@ def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc,
     ax3.set_xlabel('Time (s)')
     ax3.set_ylabel('population Firing Rate')
 
-    ax_all = [ax2, ax3]
-    for axi in ax_all:
-        axi.legend()
-    
+   # ask matplotlib for the plotted objects and their labels
+    lines, labels = ax2.get_legend_handles_labels()
+    lines2, labels2 = ax3.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels + labels2, loc=0)
+    ax1.set_title(sim_name)
     plt.show()
 
 def bin_array(array, BIN, time_array):
@@ -421,3 +422,36 @@ def plot_psd(frq_max, frq_good, pwr_region_E_good, pwr_region_I_good):
 
     plt.tight_layout()
     plt.show()
+
+def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.000315, 
+                      stimval = 0,stimdur = 50,stimtime_mean = 2500. ,stim_region = 5, n_nodes=68, 
+                      cut_transient=2000, run_sim=5000, nseed=10):
+    
+    folder_root = './result/synch'
+    sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
+    
+    print(sim_name)
+    parameters.parameter_simulation['path_result'] = folder_root + '/' + sim_name + '/'
+
+    parameters.parameter_model['b_e'] = b_e
+
+    parameters.parameter_model['tau_e'] = tau_e
+    parameters.parameter_model['tau_i'] = tau_i
+
+    parameters.parameter_model['external_input_ex_ex']=Iext
+    parameters.parameter_model['external_input_in_ex']=Iext
+
+    # parameters for stimulus
+    weight = list(np.zeros(n_nodes))
+    weight[stim_region] = stimval # region and stimulation strength of the region 0 
+
+    parameters.parameter_stimulus["tau"]= stimdur # stimulus duration [ms]
+    parameters.parameter_stimulus["T"]= 1e9 # interstimulus interval [ms]
+    parameters.parameter_stimulus["weights"]= weight
+    parameters.parameter_stimulus["variables"]=[0] #variable to kick - it is the FR_exc
+
+    parameters.parameter_stimulus['onset'] = cut_transient + 0.5*(run_sim-cut_transient)
+    stim_time = parameters.parameter_stimulus['onset']
+    stim_steps = stim_time*10 #number of steps until stimulus
+
+    return parameters

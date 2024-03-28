@@ -40,6 +40,8 @@ EL_e = -64.0
 
 seed(9) #9,11,25
 
+sim_name = f'_b_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_eli_{int(EL_i)}_ele_{int(EL_e)}_iext_{Iext}'
+
 eqs = """
 dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
 dw/dt=(a*(vm-EL)-w)/tauw : amp
@@ -151,7 +153,7 @@ TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_
 # fig, axes = figure.add_subplots(2,1,figsize=(8,12))
 fig, axes = plt.subplots(2,1,figsize=(5,8))
 
-plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes)
+plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name)
 
 
 print(f" done")

@@ -63,6 +63,7 @@ class Parameter :
             'from_file':True,
             'from_h5':False,
             'path':path+'/../../data/QL_20120814/', #the files
+            'conn_name':'Connectivity.zip',
             # File description
             'number_of_regions':0, # number of regions
             # lenghts of tract between region : dimension => (number_of_regions, number_of_regions)
