@@ -104,7 +104,7 @@ class Parameter :
             },
             'Bold':False,
             'parameter_Bold':{
-                'variables_of_interest':[0],
+                'variables_of_interest':[0], #only the excitatory
                 'period':self.parameter_integrator['dt']*2000.0
             },
             'Ca':False,

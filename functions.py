@@ -7,6 +7,10 @@ import json
 import tvb_model_reference.src.nuu_tools_simulation_human as tools
 import pci_v2
 import bitarray
+import numpy.random as rgn
+import tvb.simulator.lab as lab
+from IPython.display import clear_output
+import builtins 
 
 # prepare firing rate
 def bin_array(array, BIN, time_array):
@@ -813,9 +817,10 @@ def calculate_PCI(parameters, n_seeds, run_sim, cut_transient, stimval=1e-3, b_e
         np.save(save_file_name, savefile)
         print(save_file_name)
         print('Seed', sim_curr + ijk, ' done\n')
+    clear_output(wait=False)
+    print(f"Done: b_e={b_e}, tau_e={tau_e}, tau_i={tau_i}", flush=True)
 
-def sim_init(parameters, initial_condition=None, parameter_stimulation = None,
-         my_seed = 10):
+def sim_init(parameters, initial_condition=None, my_seed = 10):
     '''
     Initialise the simulator with parameter
 
@@ -993,8 +998,7 @@ def sim_init(parameters, initial_condition=None, parameter_stimulation = None,
         raise Exception('Bad type for the coupling')
 
         
-        
-        
+    
     ## Integrator
     if not parameter_integrator['stochastic']:
         if parameter_integrator['type'] == 'Heun':
@@ -1020,19 +1024,13 @@ def sim_init(parameters, initial_condition=None, parameter_stimulation = None,
         else:
             raise Exception('Bad type for the integrator')
 
-
-
-
-
-
-
     ## Monitors
     monitors =[]
     if parameter_monitor['Raw']:
         monitors.append(lab.monitors.Raw())
     if parameter_monitor['TemporalAverage']:
         monitor_TAVG = lab.monitors.TemporalAverage(
-            variables_of_interest=parameter_monitor['parameter_TemporalAverage']['variables_of_interest'],
+            variables_of_interest=np.array(parameter_monitor['parameter_TemporalAverage']['variables_of_interest']),
             period=parameter_monitor['parameter_TemporalAverage']['period'])
         monitors.append(monitor_TAVG)
     if parameter_monitor['Bold']:
@@ -1056,27 +1054,84 @@ def sim_init(parameters, initial_condition=None, parameter_stimulation = None,
     #save the parameters in on file
     if not os.path.exists(parameter_simulation['path_result']):
         os.makedirs(parameter_simulation['path_result'])
-    f = open(parameter_simulation['path_result']+'/parameter.json',"w")
-    f.write("{\n")
-    for name,dic in [('parameter_simulation',parameter_simulation),
-                     ('parameter_model',parameter_model),
-                     ('parameter_connection_between_region',parameter_connection_between_region),
-                     ('parameter_coupling',parameter_coupling),
-                     ('parameter_integrator',parameter_integrator),
-                     ('parameter_monitor',parameter_monitor)]:
-        f.write('"'+name+'" : ')
-        try:
-            json.dump(dic, f)
+        f = open(parameter_simulation['path_result']+'/parameter.json',"w")
+        f.write("{\n")
+        for name,dic in [('parameter_simulation',parameter_simulation),
+                        ('parameter_model',parameter_model),
+                        ('parameter_connection_between_region',parameter_connection_between_region),
+                        ('parameter_coupling',parameter_coupling),
+                        ('parameter_integrator',parameter_integrator),
+                        ('parameter_monitor',parameter_monitor)]:
+            f.write('"'+name+'" : ')
+            try:
+                json.dump(dic, f)
+                f.write(",\n")
+            except TypeError:
+                print("not serialisable")
+        if stimulation is not None:
+            f.write('"parameter_stimulation" : ')
+            json.dump(parameter_stimulation, f)
             f.write(",\n")
-        except TypeError:
-            print("not serialisable")
-    if stimulation is not None:
-        f.write('"parameter_stimulation" : ')
-        json.dump(parameter_stimulation, f)
-        f.write(",\n")
 
-    f.write('"myseed":'+str(my_seed)+"\n}\n")
-    f.close()
+        f.write('"myseed":'+str(my_seed)+"\n}\n")
+        f.close()
+    elif os.path.exists(parameter_simulation['path_result']+'/parameter.json'):
+        with open(parameter_simulation['path_result']+'/parameter.json', "r") as f:
+            data = json.load(f)
+        list_param = [parameter_model,parameter_connection_between_region ,parameter_coupling ,parameter_integrator ] 
+        list_data = [data['parameter_model'],data['parameter_connection_between_region'],data['parameter_coupling'],data['parameter_integrator']]
+        #compare to see if indeed they have the same model parameters
+        for dic_param, dic_data in zip(list_param,list_data):
+            if not compare_dicts(dic_param, dic_data):
+                print("Different parameters of the two files:")
+                print("Existing from json: ",dic_data)
+                print("New one: ",dic_param)
+
+                # Prompt  input
+                response = builtins.input("Do you want to continue? (Y/N): ").strip().lower()
+                
+                # Check if the response is valid
+                while response not in ['y', 'n']:
+                    print("Invalid input. Please enter Y or N.")
+                    response = builtins.input("Do you want to continue? (Y/N): ").strip().lower()
+                
+                # Check the user's response
+                if response == 'n':
+                    raise Exception("Try a different path")
+                elif response == 'y':
+                    print("Continuing...")
+                    pass
+                
+        
+        if compare_dicts(parameter_monitor, data['parameter_monitor']):
+            print("Same monitor configurations, the results will be overwritten")
+            f.close()
+        elif not compare_dicts(parameter_monitor, data['parameter_monitor']):
+            
+            print("Adding new monitors ")
+
+            if data['parameter_monitor']['Raw']==True and parameters.parameter_monitor['Raw']==True:
+                print("overwriting Raw")
+                data['parameter_monitor']['Raw'] = True #there will be a raw monitor
+            
+            if data['parameter_monitor']['TemporalAverage']==True and parameters.parameter_monitor['TemporalAverage']==True:
+                print("overwriting TempAvg")
+                data['parameter_monitor']['parameter_TemporalAverage'] = parameters.parameter_monitor['parameter_TemporalAverage']
+            elif data['parameter_monitor']['TemporalAverage']==False and parameters.parameter_monitor['TemporalAverage']==True:
+                print("Adding TempAvg")
+                data['parameter_monitor']['parameter_TemporalAverage'] = parameters.parameter_monitor['parameter_TemporalAverage']
+            
+            if data['parameter_monitor']['Bold']==True and parameters.parameter_monitor['Bold']==True:
+                print("overwriting Bold")
+                data['parameter_monitor']['parameter_Bold'] = parameters.parameter_monitor['parameter_Bold']
+            elif data['parameter_monitor']['Bold']==False and parameters.parameter_monitor['Bold']==True:
+                print("Adding Bold")
+                data['parameter_monitor']['parameter_Bold'] = parameters.parameter_monitor['parameter_Bold']
+
+            with open(parameter_simulation['path_result']+'/parameter.json', "w") as f:
+                json.dump(data, f, indent=4) 
+                f.close()
+
 
 
     #initialize the simulator: edited by TA and Jen, added stimulation argument, try removing surface
@@ -1095,3 +1150,18 @@ def sim_init(parameters, initial_condition=None, parameter_stimulation = None,
         np.save(parameter_simulation['path_result']+'/step_init.npy',simulator.history.buffer)
         # end edit
     return simulator
+
+def compare_dicts(dict1, dict2):
+    """
+    Compare two dictionaries for equality.
+    """
+    if len(dict1) != len(dict2):
+        return False
+    
+    for key in dict1:
+        if key not in dict2:
+            return False
+        if dict1[key] != dict2[key]:
+            return False
+    
+    return True
