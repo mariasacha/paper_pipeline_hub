@@ -213,7 +213,7 @@ class Zerlaut_adaptation_first_order(Model):
         doc="""inhibitory decay [ms]""")
 
     N_tot = NArray(
-        dtype=numpy.int,
+        dtype=int,
         label=":math:`N_{tot}`",
         default=numpy.array([10000]),
         domain=Range(lo=1000, hi=50000, step=1000),
@@ -238,14 +238,14 @@ class Zerlaut_adaptation_first_order(Model):
         doc="""fraction of inhibitory cells""")
 
     K_ext_e = NArray(
-        dtype=numpy.int,
+        dtype=int,
         label=":math:`K_ext_e`",
         default=numpy.array([400]),
         domain=Range(lo=0, hi=10000, step=1),  # inhibitory cell number never overcomes excitatory ones
         doc="""Number of excitatory connexions from external population""")
 
     K_ext_i = NArray(
-        dtype=numpy.int,
+        dtype=int,
         label=":math:`K_ext_i`",
         default=numpy.array([0]),
         domain=Range(lo=0, hi=10000, step=1),  # inhibitory cell number never overcomes excitatory ones
@@ -350,7 +350,7 @@ class Zerlaut_adaptation_first_order(Model):
 
     state_variables = 'E I W_e W_i noise'.split()
     _nvar = 5
-    cvar = numpy.array([0], dtype=numpy.int32)
+    cvar = numpy.array([0], dtype=int)
 
     def dfun(self, state_variables, coupling, local_coupling=0.00):
         r"""

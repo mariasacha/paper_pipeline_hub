@@ -13,7 +13,7 @@
 # 15/2/2017:    added the "calculate_pci_lower" function to compute the lower bound of the time-dependent PCI (Thierry Nieus thierrynieus@gmail.com )
 
 import numpy as np
-# from bitarray import bitarray
+from bitarray import bitarray
 
 SpeedUp=False # remove all rows with zero activity 
 

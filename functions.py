@@ -3,6 +3,10 @@ import os
 import scipy.signal as signal
 from numba import njit
 import itertools
+import json
+import tvb_model_reference.src.nuu_tools_simulation_human as tools
+import pci_v2
+import bitarray
 
 # prepare firing rate
 def bin_array(array, BIN, time_array):
@@ -426,9 +430,18 @@ def plot_psd(frq_max, frq_good, pwr_region_E_good, pwr_region_I_good):
 def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.000315, 
                       stimval = 0,stimdur = 50,stimtime_mean = 2500. ,stim_region = 5, n_nodes=68, 
                       cut_transient=2000, run_sim=5000, nseed=10):
-    
-    folder_root = './result/synch'
-    sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
+    """
+    assign the desired b_e, tau_e, tau_i, iext, stimval, stimdur, stim_region
+    if needed to change other parameters, it can be done manually
+    """
+
+    if stimval:
+        folder_root= './result/evoked'
+        sim_name =  f"stim_{stimval}_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
+
+    else:
+        folder_root = './result/synch'
+        sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     
     print(sim_name)
     parameters.parameter_simulation['path_result'] = folder_root + '/' + sim_name + '/'
@@ -455,3 +468,630 @@ def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.00
     stim_steps = stim_time*10 #number of steps until stimulus
 
     return parameters
+
+def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, tau_i = 5.0, 
+               Iext = 0.000315,nseed=10, vars_int = ['E', 'I', 'W_e']):
+    '''
+    return the result of the simulation between the wanted time
+    :parameters: the parameter variable
+    :time_begin: the start time for the result (basically to discard cut_transient)
+    :time_end:  the ending time for the result
+    :vars_int: the variables of interest to load
+     for AdEx:
+        'E': excitatory FR
+        'I': inhibitory FR
+        'C_ee': covariance exc
+        'C_ei': covariance exc-inh
+        'C_ii': covariance inh
+        'W_e': adaptatioin exc
+        'W_i': adaptation inh
+        'noise': noise 
+    :return: result of all monitor
+        it will be a list with length equal to the monitors
+        each element of the list will be an array containing the variables of interest
+        this array will have shape (var_int, time, n_nodes)
+    '''
+    folder_root = './result/synch'
+    sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
+    
+    print("Loading: ", sim_name)
+    path = folder_root + '/' + sim_name + '/'
+
+    with open(path + '/parameter.json') as f:
+        parameters = json.load(f)
+    parameter_simulation = parameters['parameter_simulation']
+    parameter_monitor = parameters['parameter_monitor']
+    count_begin = int(time_begin/parameter_simulation['save_time'])
+    count_end = int(time_end/parameter_simulation['save_time'])+1
+    nb_monitor = parameter_monitor['Raw'] + parameter_monitor['TemporalAverage'] + parameter_monitor['Bold'] + parameter_monitor['Ca'] #nuu added Ca monitor
+    if 'Afferent_coupling' in parameter_monitor.keys() and parameter_monitor['Afferent_coupling']:
+        nb_monitor+=1
+    output =[]
+
+    for count in range(count_begin,count_end):
+        if prints:
+            print ('count {0} from {1}'.format(count,count_end))
+        
+        result = np.load(path+'/step_'+str(count)+'.npy',allow_pickle=True)
+        for i in range(result.shape[0]):
+            tmp = np.array(result[i])
+            if len(tmp) != 0:
+                tmp = tmp[np.where((time_begin <= tmp[:,0]) &  (tmp[:,0]<= time_end)),:]
+                tmp_time = tmp[0][:,0]
+                if tmp_time.shape[0] != 0:
+                    one = tmp[0][:,1][0]
+                    tmp_value = np.concatenate(tmp[0][:,1]).reshape(tmp_time.shape[0],one.shape[0],one.shape[1])
+                    if len(output) == nb_monitor:
+                        output[i]=[np.concatenate([output[i][0],tmp_time]),np.concatenate([output[i][1],tmp_value])]
+                    else:
+                        output.append([tmp_time,tmp_value])
+    
+    # indices of each variabel in the result
+    dict_var_int = {'E':0 ,'I': 1 ,'C_ee': 2 ,'C_ei': 3,'C_ii': 4,'W_e': 5,'W_i': 6,'noise': 7}
+    len_var = len(vars_int)
+
+    #first iterate the monitors
+    result = []
+    for i in range(nb_monitor):
+        time_s = output[i][0]
+        n_nodes = output[i][1][:,0,:].shape[1]
+        #create empty array with shape (number of variables of interest, time)
+        var_arr = np.zeros((len_var, time_s.shape[0], n_nodes))
+
+        c = 0
+        for var in vars_int:
+            index_var = dict_var_int[var] #get the index of the variables
+            if index_var < 2 or index_var==7: #if it is the exc, inh FR or noise, transform from KHz to Hz
+                res = output[i][1][:,index_var,:]*1e3
+                var_arr[c] = res
+            else:
+                res = output[i][1][:,index_var,:]
+                var_arr[c] = res
+            c+=1 
+        
+        result.append(var_arr)
+    shape = np.shape(result[0][0])
+    del output
+    # access_results(parameter_monitor,vars_int,shape)
+    return result, (parameter_monitor,vars_int,shape)
+
+def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
+    """
+    print how the results are indexed
+    result = this array will have shape (var_int, time, n_nodes)
+
+    """
+    (parameter_monitor,vars_int,shape) = for_explan
+
+    print("\nExplaining the indices in result:")
+    print('The result has a length equal to you different parameter combinations, i.e:')
+    for i in range(len(bvals)):    
+        print(f'result[{i}]: for b_e = {bvals[i]} and {change_of}= {tau_es[i]}')
+
+    print('\nThe result[i] is a list of arrays, every element of a list corresponds to a monitor:')
+
+    list_monitors = []
+    c= 0
+    for key in parameter_monitor.keys():
+        if parameter_monitor[key] is True:
+            print(f'{key} monitor : result[i][{c}]')
+            list_monitors.append(key)
+            c+=1
+
+    print('\nEach monitor contains an array with the selected variables of interest, for all the time points and nodes')
+    print(f"For example for {list_monitors[0]} monitor:")
+
+    k=0
+    for var in vars_int:
+        print(f'For {var} : result[i][0][{k}]')
+        k+=1
+
+    print(f'\nThese arrays have shape: time_points x number_of_nodes: {shape}')
+
+def create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of='tau_e', 
+               Iext = 0.000315,nseed=10):
+    """
+    parameters: the parameters of the model
+    param : tuple, in the form of (i, [b_e, tau])
+    result: the result with all the parametrizations, all the monitors, variables
+    monitor: the selected monitor (string)
+    for_explan: tuple, from the get_result function, to catch all the monitors that have been used in the get_result
+    var_select: the variables to be plotted
+    change_of: str, 'tau_e' if you change values of tau_e, 'tau_i' otherwise
+    return a dictionary with key the selected variables, 
+    """
+    #Take the parameters of interest
+    (i, [b_e, tau_e]) = param
+    result = result[i]
+    if change_of=='tau_i':
+        tau_i = tau_e
+        tau_e = 5.0
+    else:
+        tau_i = 5.0
+
+    #Take the monitor of interest
+    folder_root = './result/synch'
+    sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
+    path = folder_root + '/' + sim_name + '/'
+    with open(path + '/parameter.json') as f:
+        parameters = json.load(f)
+    parameter_monitor = parameters['parameter_monitor']
+
+    list_monitors = {} # {Raw : 0, Temporal:1, etc}
+    c= 0
+    for key in parameter_monitor.keys():
+        if parameter_monitor[key] is True:
+            list_monitors[key] = c
+            c+=1
+    
+    result = result[list_monitors[monitor]] #take the wanted monitor
+
+    #Take the variables of interest
+    (_,vars_int,_) = for_explan
+
+    list_vars = {}
+    k=0
+    for var in vars_int:
+        list_vars[var] = k
+        k+=1
+    
+    result_fin = {}
+
+    for var in var_select:
+        result_fin[var] = result[list_vars[var]]
+
+    return result_fin
+
+def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,cut_transient, run_sim, change_of='tau_e', 
+               Iext = 0.000315,nseed=10):
+    
+    rows =int(len(params))
+
+    cols = len(var_select) 
+    if 'E' and 'I' in var_select:
+        cols = cols-1 #put E and I in the same plot
+    
+    if cols == 1:
+        rows=1
+        cols=2
+
+    fig, axes = plt.subplots(rows,cols,figsize=(8,5))
+    
+    for param in enumerate(params):
+        #load results for the params
+        (i, [b_e, tau]) = param 
+        result_fin = create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of=change_of, Iext = Iext,nseed=nseed)
+
+        #create list with the indices for each variable
+        var_ind_list = {}
+        j =0
+        for var in var_select:
+            ax_index = i if len(axes.shape) ==1 else (i, j )#that means that you have one row or one col
+            if (var == 'E' and 'I' in var_ind_list.keys()) or (var == 'I' and 'E' in var_ind_list.keys()):
+                continue
+            else:
+                var_ind_list[var] = ax_index
+                j+=1
+        
+        #if E and I in the vars, plot them in the same subplot
+        if 'E' and 'I' in result_fin.keys():
+            try:
+                ax_ind= var_ind_list['E']
+                del var_ind_list['E']
+            except KeyError:
+                ax_ind = var_ind_list['I']
+                del var_ind_list['I']
+
+            time_s = np.linspace(cut_transient, run_sim, result_fin['E'].shape[0])
+            Li = axes[ax_ind].plot(time_s,result_fin['I'],color='darkred', label='Inh') # [times, regions]
+            Le = axes[ax_ind].plot(time_s,result_fin['E'],color='SteelBlue', label='Exc') # [times, regions]
+            axes[ax_ind].set_ylabel('Firing rate (Hz)', fontsize=16)
+            axes[ax_ind].set_title(change_of+ f'= {tau} ms, b_e={b_e}', fontsize=16)
+            axes[ax_ind].legend([Li[0], Le[0]], ['Inh.','Exc.'], loc='upper right', fontsize='xx-small')
+
+
+            for var in var_ind_list.keys():
+                ax_ind= var_ind_list[var]
+                Li = axes[ax_ind].plot(time_s,result_fin[var], label=var) # [times, regions]
+                axes[ax_ind].set_ylabel(var, fontsize=16)
+                axes[ax_ind].set_title(change_of+ f'= {tau} ms, b_e={b_e}', fontsize=16)
+                axes[ax_ind].legend([Li[0]], [var], loc='upper right', fontsize='xx-small') 
+
+        #else plot all the variables separately
+        else:
+            for var in var_ind_list.keys():
+                ax_ind= var_ind_list[var]
+                time_s = np.linspace(cut_transient, run_sim,result_fin[var].shape[0])
+                Li = axes[ax_ind].plot(time_s,result_fin[var], label=var) # [times, regions]
+                axes[ax_ind].set_ylabel(var, fontsize=16)
+                axes[ax_ind].set_title(change_of+ f'= {tau} ms, b_e={b_e}', fontsize=16)
+                axes[ax_ind].legend([Li[0]], [var], loc='upper right', fontsize='xx-small')    
+    
+
+    for ax in axes.reshape(-1):
+        ax.set_xlabel('Time (ms)')
+
+    plt.tight_layout()
+    plt.show()
+
+def calculate_PCI(parameters, n_seeds, run_sim, cut_transient, stimval=1e-3, b_e=5, tau_e=5.0, tau_i=5.0, Iext=0.000315, n_trials = 5 ):
+    # Perturbational Complexity Index (PCI) computation and saving
+    # number of independent random seeds and simulations
+    # n_trials: number of simulations/realisations to analyse for one PCI value
+
+    sim_names = np.arange(0,n_seeds,n_trials) 
+    for sim_curr in sim_names:   #0,  5, 10, 15, 20, 25, 30, 35
+        print(sim_curr)
+        entropy_trials = []
+        LZ_trials = []
+        PCI_trials = []
+
+        sig_cut_analysis = []
+        t_stim_onsets = []
+        for i_trials in range(sim_curr, sim_curr + n_trials): 
+            print(i_trials)
+            # if we had 40 seeds and n_trials=5 then 
+            #for i_trials in range(0, 5)
+            # for i_trials in range (5,10)
+            times_l = []
+            rateE_m = []
+            nstep = int(run_sim/1000) # number of saved files
+
+            sim_name =  f"stim_{stimval}_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{i_trials}"
+
+            folder_path = './result/evoked/' + sim_name+'/'
+
+            for i_step in range(nstep):
+                raw_curr = np.load(folder_path + 'step_'+str(i_step)+'.npy',
+                encoding = 'latin1', allow_pickle=True)
+                for i_time in range(len(raw_curr[0])): 
+                    times_l.append(raw_curr[0][i_time][0])
+                    rateE_m.append(np.concatenate(raw_curr[0][i_time][1][0]))
+
+            times_l = np.array(times_l) # in ms
+            rateE_m = np.array(rateE_m) # matrix of size nbins*nregions
+
+            # choosing variable of interest
+            var_of_interest = rateE_m
+            
+            # discard transient
+            nbins_transient = int(cut_transient/times_l[0]) # to discard in analysis   
+            sig_region_all = var_of_interest[nbins_transient:,:] 
+            sig_region_all = np.transpose(sig_region_all) # now formatted as regions*times
+
+            # load t_onset
+            with open(folder_path+"parameter.json", 'r') as json_file:
+                data = json.load(json_file)
+            onset_value = data['parameter_stimulation']['onset']
+            t_stim_bins = int((onset_value - cut_transient)/times_l[0])
+            
+            #save all the onsets:
+            t_stim_onsets.append(t_stim_bins)
+
+            t_analysis = 300 #ms
+            nbins_analysis =  int(t_analysis/times_l[0])
+            
+            sig_cut_region =  sig_region_all[:,t_stim_bins - nbins_analysis:t_stim_bins + nbins_analysis]
+            
+            # append directly the sig_cut_analysis
+            sig_cut_analysis.append(sig_cut_region)
+
+        sig_all_binary = tools.binarise_signals(np.array(sig_cut_analysis), int(t_analysis/times_l[0]), 
+                                        nshuffles = 10, percentile = 100)
+        
+        #return entropy
+        for ijk in range(n_trials):
+            binJ=sig_all_binary.astype(int)[ijk,:,t_analysis:] # CHECK each row is a time series !
+            binJs=pci_v2.sort_binJ(binJ) # sort binJ as done in Casali et al. 2013
+            source_entropy=pci_v2.source_entropy(binJs)
+            print('Entropy', source_entropy)
+
+            # return Lempel-Ziv
+            Lempel_Ziv_lst=pci_v2.lz_complexity_2D(binJs)
+            print('Lempel-Ziv', Lempel_Ziv_lst)
+
+            #normalization factor 
+            norm=pci_v2.pci_norm_factor(binJs)
+
+            # computing perturbational complexity index
+            pci_lst = Lempel_Ziv_lst/norm
+            print('PCI', pci_lst)
+
+            all_entropy_lst=[source_entropy,pci_lst]
+
+            entropy_trials.append(all_entropy_lst) 
+            LZ_trials.append(Lempel_Ziv_lst) 
+            PCI_trials.append(pci_lst) 
+
+        # file saving
+        save_file_name = folder_path + f'Params_PCI_bE_{b_e}_stim_{stimval}_tau_e_{tau_e}_tau_i_{tau_i}_trial_{int(sim_curr/n_trials)}.npy'
+        savefile = {}
+        savefile['entropy'] = np.array(entropy_trials)
+        savefile['Lempel-Ziv'] = np.array(LZ_trials)
+        savefile['PCI'] = np.array(PCI_trials)
+
+        np.save(save_file_name, savefile)
+        print(save_file_name)
+        print('Seed', sim_curr + ijk, ' done\n')
+
+def sim_init(parameters, initial_condition=None, parameter_stimulation = None,
+         my_seed = 10):
+    '''
+    Initialise the simulator with parameter
+
+    :param parameter_simulation: parameters for the simulation
+    :param parameter_model: parameters for the model
+    :param parameter_connection_between_region: parameters for the connection between nodes
+    :param parameter_coupling: parameters for the coupling of equations
+    :param parameter_integrator: parameters for the intergator of the equation
+    :param parameter_monitor: parameters for the monitors
+    :param initial_condition: the possibility to add an initial condition
+    :return: the simulator initialize
+    '''
+
+    parameter_simulation  = parameters.parameter_simulation
+    parameter_model = parameters.parameter_model
+    parameter_connection_between_region = parameters.parameter_connection_between_region
+    parameter_coupling = parameters.parameter_coupling
+    parameter_integrator = parameters.parameter_integrator
+    parameter_monitor = parameters.parameter_monitor
+    parameter_stimulation = parameters.parameter_stimulus
+    ## initialise the random generator
+    parameter_simulation['seed'] = my_seed
+    rgn.seed(parameter_simulation['seed'])
+
+    if parameter_model['matteo']:
+        import tvb_model_reference.src.Zerlaut_matteo as model
+    else:
+        import tvb_model_reference.src.Zerlaut as model
+
+    ## Model
+    if parameter_model['order'] == 1:
+        model = model.Zerlaut_adaptation_first_order(variables_of_interest='E I W_e W_i noise'.split())
+    elif parameter_model['order'] == 2:
+        model = model.Zerlaut_adaptation_second_order(variables_of_interest='E I C_ee C_ei C_ii W_e W_i noise'.split())
+    else:
+        raise Exception('Bad order for the model')
+
+    model.g_L=np.array(parameter_model['g_L'])
+    model.E_L_e=np.array(parameter_model['E_L_e'])
+    model.E_L_i=np.array(parameter_model['E_L_i'])
+    model.C_m=np.array(parameter_model['C_m'])
+    model.b_e=np.array(parameter_model['b_e'])
+    model.a_e=np.array(parameter_model['a_e'])
+    model.b_i=np.array(parameter_model['b_i'])
+    model.a_i=np.array(parameter_model['a_i'])
+    model.tau_w_e=np.array(parameter_model['tau_w_e'])
+    model.tau_w_i=np.array(parameter_model['tau_w_i'])
+    model.E_e=np.array(parameter_model['E_e'])
+    model.E_i=np.array(parameter_model['E_i'])
+    model.Q_e=np.array(parameter_model['Q_e'])
+    model.Q_i=np.array(parameter_model['Q_i'])
+    model.tau_e=np.array(parameter_model['tau_e'])
+    model.tau_i=np.array(parameter_model['tau_i'])
+    model.N_tot=np.array(parameter_model['N_tot'])
+    model.p_connect_e=np.array(parameter_model['p_connect_e'])
+    model.p_connect_i=np.array(parameter_model['p_connect_i'])
+    model.g=np.array(parameter_model['g'])
+    model.T=np.array(parameter_model['T'])
+    model.P_e=np.array(parameter_model['P_e'])
+    model.P_i=np.array(parameter_model['P_i'])
+    model.K_ext_e=np.array(parameter_model['K_ext_e'])
+    model.K_ext_i=np.array(parameter_model['K_ext_i'])
+    model.external_input_ex_ex=np.array(parameter_model['external_input_ex_ex'])
+    model.external_input_ex_in=np.array(parameter_model['external_input_ex_in'])
+    model.external_input_in_ex=np.array(parameter_model['external_input_in_ex'])
+    model.external_input_in_in=np.array(parameter_model['external_input_in_in'])
+    model.tau_OU=np.array(parameter_model['tau_OU'])
+    model.weight_noise=np.array(parameter_model['weight_noise'])
+    model.state_variable_range['E'] =np.array( parameter_model['initial_condition']['E'])
+    model.state_variable_range['I'] =np.array( parameter_model['initial_condition']['I'])
+    if parameter_model['order'] == 2:
+        model.state_variable_range['C_ee'] = np.array(parameter_model['initial_condition']['C_ee'])
+        model.state_variable_range['C_ei'] = np.array(parameter_model['initial_condition']['C_ei'])
+        model.state_variable_range['C_ii'] = np.array(parameter_model['initial_condition']['C_ii'])
+    model.state_variable_range['W_e'] = np.array(parameter_model['initial_condition']['W_e'])
+    model.state_variable_range['W_i'] = np.array(parameter_model['initial_condition']['W_i'])
+
+    ## Connection
+    if parameter_connection_between_region['default']:
+        connection = lab.connectivity.Connectivity().from_file()
+    elif parameter_connection_between_region['from_file']:
+        path = parameter_connection_between_region['path']
+        conn_name = parameter_connection_between_region['conn_name']
+        connection = lab.connectivity.Connectivity().from_file(path+'/' + conn_name)
+    elif parameter_connection_between_region['from_h5']:
+        connection = lab.connectivity.Connectivity().from_file(parameter_connection_between_region['path'])
+    elif parameter_connection_between_region['from_folder']:
+        # mandatory file 
+        tract_lengths = np.loadtxt(parameter_connection_between_region['path']+'/tract_lengths.txt')
+        weights = np.loadtxt(parameter_connection_between_region['path']+'/weights.txt')
+        # optional file
+        if os.path.exists(parameter_connection_between_region['path']+'/region_labels.txt'):
+            region_labels = np.loadtxt(parameter_connection_between_region['path']+'/region_labels.txt', dtype=str)
+        else:
+            region_labels = np.array([], dtype=np.dtype('<U128'))
+        if os.path.exists(parameter_connection_between_region['path']+'/centres.txt'):
+            centers = np.loadtxt(parameter_connection_between_region['path']+'/centres.txt')
+        else:
+            centers = np.array([])
+        if os.path.exists(parameter_connection_between_region['path']+'/cortical.txt'):
+            cortical = np.array(np.loadtxt(parameter_connection_between_region['path']+'/cortical.txt'),dtype=np.bool)
+        else:
+            cortical=None
+        connection = lab.connectivity.Connectivity(
+                                                   tract_lengths=tract_lengths,
+                                                   weights=weights,
+                                                   region_labels=region_labels,
+                                                   centres=centers.T,
+                                                   cortical=cortical)
+    else:
+        connection = lab.connectivity.Connectivity(
+                                                number_of_regions=parameter_connection_between_region['number_of_regions'],
+                                               tract_lengths=np.array(parameter_connection_between_region['tract_lengths']),
+                                               weights=np.array(parameter_connection_between_region['weights']),
+            region_labels=np.arange(0, parameter_connection_between_region['number_of_regions'], 1, dtype='U128'),#TODO need to replace by parameter
+            centres=np.arange(0, parameter_connection_between_region['number_of_regions'], 1),#TODO need to replace by parameter
+        )
+
+    if 'normalised'in parameter_connection_between_region.keys() and parameter_connection_between_region['normalised']:
+        connection.weights = connection.weights/(np.sum(connection.weights,axis=0)+1e-12)
+    connection.speed = np.array(parameter_connection_between_region['speed'])
+
+
+    ## Stimulus: added by TA and Jen
+    if parameter_stimulation['weights'] is None or any(parameter_stimulation['weights'])== 0.0: #changed by Maria
+        stimulation = None
+    else:
+        eqn_t = lab.equations.PulseTrain()
+        eqn_t.parameters["onset"] = np.array(parameter_stimulation["onset"]) # ms
+        eqn_t.parameters["tau"]   = np.array(parameter_stimulation["tau"]) # ms
+        eqn_t.parameters["T"]     = np.array(parameter_stimulation["T"]) # ms; # 0.02kHz repetition frequency
+        stimulation = lab.patterns.StimuliRegion(temporal=eqn_t,
+                                          connectivity=connection,
+                                          weight=np.array(parameter_stimulation['weights']))
+        model.stvar = parameter_stimulation['variables']
+    ## end add
+
+    ## Coupling
+    if parameter_coupling['type'] == 'Linear':
+        coupling = lab.coupling.Linear(a=np.array(parameter_coupling['parameter']['a']),
+                                       b=np.array(parameter_coupling['parameter']['b']))
+    elif parameter_coupling['type'] == 'Scaling':
+        coupling = lab.coupling.Scaling(a=np.array(parameter_coupling['parameter']['a']))
+    elif parameter_coupling['type'] == 'HyperbolicTangent':
+        coupling = lab.coupling.HyperbolicTangent(a=np.array(parameter_coupling['parameter']['a']),
+                                       b=np.array(parameter_coupling['parameter']['b']),
+                                       midpoint=np.array(parameter_coupling['parameter']['midpoint']),
+                                       sigma= np.array(parameter_coupling['parameter']['sigma']),)
+    elif parameter_coupling['type'] == 'Sigmoidal':
+        coupling = lab.coupling.Sigmoidal(a=np.array(parameter_coupling['parameter']['a']),                                       b=parameter_coupling['b'],
+                                       midpoint=np.array(parameter_coupling['parameter']['midpoint']),
+                                       sigma= np.array(parameter_coupling['parameter']['sigma']),
+                                       cmin=np.array(parameter_coupling['parameter']['cmin']),
+                                       cmax=np.array(parameter_coupling['parameter']['cmax']))
+    elif parameter_coupling['type'] == 'SigmoidalJansenRit':
+        coupling = lab.coupling.SigmoidalJansenRit(a=np.array(parameter_coupling['parameter']['a']),                                       b=parameter_coupling['b'],
+                                       midpoint=np.array(parameter_coupling['parameter']['midpoint']),
+                                       r= np.array(parameter_coupling['parameter']['r']),
+                                       cmin=np.array(parameter_coupling['parameter']['cmin']),
+                                       cmax=np.array(parameter_coupling['parameter']['cmax']))
+    elif parameter_coupling['type'] == 'PreSigmoidal':
+        coupling = lab.coupling.PreSigmoidal(H=np.array(parameter_coupling['parameter']['H']),                                       b=parameter_coupling['b'],
+                                       Q=np.array(parameter_coupling['parameter']['Q']),
+                                       G= np.array(parameter_coupling['parameter']['G']),
+                                       P=np.array(parameter_coupling['parameter']['P']),
+                                       theta=np.array(parameter_coupling['parameter']['theta']),
+                                       dynamic=np.array(parameter_coupling['parameter']['dynamic']),
+                                       globalT=np.array(parameter_coupling['parameter']['globalT']),
+                                             )
+    elif parameter_coupling['type'] == 'Difference':
+        coupling = lab.coupling.Difference(a=np.array(parameter_coupling['parameter']['a']))
+    elif parameter_coupling['type'] == 'Kuramoto':
+        coupling = lab.coupling.Kuramoto(a=np.array(parameter_coupling['parameter']['a']))
+    else:
+        raise Exception('Bad type for the coupling')
+
+        
+        
+        
+    ## Integrator
+    if not parameter_integrator['stochastic']:
+        if parameter_integrator['type'] == 'Heun':
+            integrator = lab.integrators.HeunDeterministic(dt=np.array(parameter_integrator['dt']))
+        elif parameter_integrator['type'] == 'Euler':
+             integrator = lab.integrators.EulerDeterministic(dt=np.array(parameter_integrator['dt']))
+        else:
+            raise Exception('Bad type for the integrator')
+    else:
+        if parameter_integrator['noise_type'] == 'Additive':
+            noise = lab.noise.Additive(nsig=np.array(parameter_integrator['noise_parameter']['nsig']),
+                                        ntau=parameter_integrator['noise_parameter']['ntau'],)
+            # print("type of noise: ", type(noise), "\nand noise: ", noise)
+            
+        else:
+            raise Exception('Bad type for the noise')
+        noise.random_stream.seed(parameter_simulation['seed'])
+
+        if parameter_integrator['type'] == 'Heun':
+            integrator = lab.integrators.HeunStochastic(noise=noise,dt=parameter_integrator['dt'])
+        elif parameter_integrator['type'] == 'Euler':
+             integrator = lab.integrators.EulerStochastic(noise=noise,dt=parameter_integrator['dt'])
+        else:
+            raise Exception('Bad type for the integrator')
+
+
+
+
+
+
+
+    ## Monitors
+    monitors =[]
+    if parameter_monitor['Raw']:
+        monitors.append(lab.monitors.Raw())
+    if parameter_monitor['TemporalAverage']:
+        monitor_TAVG = lab.monitors.TemporalAverage(
+            variables_of_interest=parameter_monitor['parameter_TemporalAverage']['variables_of_interest'],
+            period=parameter_monitor['parameter_TemporalAverage']['period'])
+        monitors.append(monitor_TAVG)
+    if parameter_monitor['Bold']:
+        monitor_Bold = lab.monitors.Bold(
+            variables_of_interest=np.array(parameter_monitor['parameter_Bold']['variables_of_interest']),
+            period=parameter_monitor['parameter_Bold']['period'])
+        monitors.append(monitor_Bold)
+    if 'Afferent_coupling' in parameter_monitor.keys() and parameter_monitor['Afferent_coupling']:
+        monitor_Afferent_coupling = lab.monitors.AfferentCoupling(variables_of_interest=None)
+        monitors.append(monitor_Afferent_coupling)
+    if parameter_monitor['Ca']:
+        monitor_Ca = lab.monitors.Ca(
+            variables_of_interest=np.array(parameter_monitor['parameter_Ca']['variables_of_interest']),
+            tau_rise=parameter_monitor['parameter_Ca']['tau_rise'],
+            tau_decay=parameter_monitor['parameter_Ca']['tau_decay'])
+        monitors.append(monitor_Ca)
+
+
+#%%
+
+    #save the parameters in on file
+    if not os.path.exists(parameter_simulation['path_result']):
+        os.makedirs(parameter_simulation['path_result'])
+    f = open(parameter_simulation['path_result']+'/parameter.json',"w")
+    f.write("{\n")
+    for name,dic in [('parameter_simulation',parameter_simulation),
+                     ('parameter_model',parameter_model),
+                     ('parameter_connection_between_region',parameter_connection_between_region),
+                     ('parameter_coupling',parameter_coupling),
+                     ('parameter_integrator',parameter_integrator),
+                     ('parameter_monitor',parameter_monitor)]:
+        f.write('"'+name+'" : ')
+        try:
+            json.dump(dic, f)
+            f.write(",\n")
+        except TypeError:
+            print("not serialisable")
+    if stimulation is not None:
+        f.write('"parameter_stimulation" : ')
+        json.dump(parameter_stimulation, f)
+        f.write(",\n")
+
+    f.write('"myseed":'+str(my_seed)+"\n}\n")
+    f.close()
+
+
+    #initialize the simulator: edited by TA and Jen, added stimulation argument, try removing surface
+    if initial_condition == None:
+        simulator = lab.simulator.Simulator(model = model, connectivity = connection,
+                          coupling = coupling, integrator = integrator, monitors = monitors,
+                                            stimulus=stimulation)
+    else:
+        simulator = lab.simulator.Simulator(model = model, connectivity = connection,
+                                            coupling = coupling, integrator = integrator,
+                                            monitors = monitors, initial_conditions=initial_condition,
+                                            stimulus=stimulation)
+    simulator.configure()
+    if initial_condition == None:
+        # save the initial condition
+        np.save(parameter_simulation['path_result']+'/step_init.npy',simulator.history.buffer)
+        # end edit
+    return simulator
