@@ -433,10 +433,11 @@ def plot_psd(frq_max, frq_good, pwr_region_E_good, pwr_region_I_good):
 
 def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.000315, 
                       stimval = 0,stimdur = 50,stimtime_mean = 2500. ,stim_region = 5, n_nodes=68, 
-                      cut_transient=2000, run_sim=5000, nseed=10):
+                      cut_transient=2000, run_sim=5000, nseed=10, additional_path_folder=''):
     """
     assign the desired b_e, tau_e, tau_i, iext, stimval, stimdur, stim_region
     if needed to change other parameters, it can be done manually
+    additional_path_folder : add in the form of 'Bold/' in case you are adding other monitors
     """
 
     if stimval:
@@ -448,7 +449,7 @@ def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.00
         sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     
     print(sim_name)
-    parameters.parameter_simulation['path_result'] = folder_root + '/' + sim_name + '/'
+    parameters.parameter_simulation['path_result'] = folder_root + '/' + sim_name + '/' +additional_path_folder
 
     parameters.parameter_model['b_e'] = b_e
 
@@ -474,7 +475,7 @@ def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.00
     return parameters
 
 def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, tau_i = 5.0, 
-               Iext = 0.000315,nseed=10, vars_int = ['E', 'I', 'W_e']):
+               Iext = 0.000315,nseed=10, vars_int = ['E', 'I', 'W_e'], additional_path_folder=''):
     '''
     return the result of the simulation between the wanted time
     :parameters: the parameter variable
@@ -499,19 +500,20 @@ def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, t
     sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     
     print("Loading: ", sim_name)
-    path = folder_root + '/' + sim_name + '/'
+    path = folder_root + '/' + sim_name + '/' + additional_path_folder
 
     with open(path + '/parameter.json') as f:
         parameters = json.load(f)
     parameter_simulation = parameters['parameter_simulation']
     parameter_monitor = parameters['parameter_monitor']
+    # print("parameter monitor: ", parameter_monitor)
     count_begin = int(time_begin/parameter_simulation['save_time'])
     count_end = int(time_end/parameter_simulation['save_time'])+1
     nb_monitor = parameter_monitor['Raw'] + parameter_monitor['TemporalAverage'] + parameter_monitor['Bold'] + parameter_monitor['Ca'] #nuu added Ca monitor
     if 'Afferent_coupling' in parameter_monitor.keys() and parameter_monitor['Afferent_coupling']:
         nb_monitor+=1
     output =[]
-
+    print("monitors:", nb_monitor)
     for count in range(count_begin,count_end):
         if prints:
             print ('count {0} from {1}'.format(count,count_end))
@@ -574,6 +576,7 @@ def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
 
     print('\nThe result[i] is a list of arrays, every element of a list corresponds to a monitor:')
 
+    true_monitors = [key for key in parameter_monitor.keys() if not key.startswith("param") and parameter_monitor[key]]
     list_monitors = []
     c= 0
     for key in parameter_monitor.keys():
@@ -593,7 +596,7 @@ def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
     print(f'\nThese arrays have shape: time_points x number_of_nodes: {shape}')
 
 def create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of='tau_e', 
-               Iext = 0.000315,nseed=10):
+               Iext = 0.000315,nseed=10, additional_path_folder=''):
     """
     parameters: the parameters of the model
     param : tuple, in the form of (i, [b_e, tau])
@@ -616,7 +619,7 @@ def create_dicts(parameters,param, result, monitor, for_explan, var_select, chan
     #Take the monitor of interest
     folder_root = './result/synch'
     sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
-    path = folder_root + '/' + sim_name + '/'
+    path = folder_root + '/' + sim_name + '/' +additional_path_folder
     with open(path + '/parameter.json') as f:
         parameters = json.load(f)
     parameter_monitor = parameters['parameter_monitor']
@@ -647,7 +650,7 @@ def create_dicts(parameters,param, result, monitor, for_explan, var_select, chan
     return result_fin
 
 def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,cut_transient, run_sim, change_of='tau_e', 
-               Iext = 0.000315,nseed=10):
+               Iext = 0.000315,nseed=10, additional_path_folder=''):
     
     rows =int(len(params))
 
@@ -664,7 +667,7 @@ def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,
     for param in enumerate(params):
         #load results for the params
         (i, [b_e, tau]) = param 
-        result_fin = create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of=change_of, Iext = Iext,nseed=nseed)
+        result_fin = create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of=change_of, Iext = Iext,nseed=nseed, additional_path_folder=additional_path_folder)
 
         #create list with the indices for each variable
         var_ind_list = {}
@@ -1047,10 +1050,7 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
             tau_rise=parameter_monitor['parameter_Ca']['tau_rise'],
             tau_decay=parameter_monitor['parameter_Ca']['tau_decay'])
         monitors.append(monitor_Ca)
-
-
-#%%
-
+    
     #save the parameters in on file
     if not os.path.exists(parameter_simulation['path_result']):
         os.makedirs(parameter_simulation['path_result'])
@@ -1076,63 +1076,46 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
         f.write('"myseed":'+str(my_seed)+"\n}\n")
         f.close()
     elif os.path.exists(parameter_simulation['path_result']+'/parameter.json'):
-        with open(parameter_simulation['path_result']+'/parameter.json', "r") as f:
-            data = json.load(f)
-        list_param = [parameter_model,parameter_connection_between_region ,parameter_coupling ,parameter_integrator ] 
-        list_data = [data['parameter_model'],data['parameter_connection_between_region'],data['parameter_coupling'],data['parameter_integrator']]
-        #compare to see if indeed they have the same model parameters
-        for dic_param, dic_data in zip(list_param,list_data):
-            if not compare_dicts(dic_param, dic_data):
-                print("Different parameters of the two files:")
-                print("Existing from json: ",dic_data)
-                print("New one: ",dic_param)
-
-                # Prompt  input
-                response = builtins.input("Do you want to continue? (Y/N): ").strip().lower()
-                
-                # Check if the response is valid
-                while response not in ['y', 'n']:
-                    print("Invalid input. Please enter Y or N.")
-                    response = builtins.input("Do you want to continue? (Y/N): ").strip().lower()
-                
-                # Check the user's response
-                if response == 'n':
-                    raise Exception("Try a different path")
-                elif response == 'y':
-                    print("Continuing...")
-                    pass
-                
+        # Prompt  input
+        response = builtins.input("This path exists already \nYou can see the data (press D), you can stop and choose another path(press N), or you can overwrite (press Y) \nWhat do you want to do? (D/N/Y): ").strip().lower()
         
-        if compare_dicts(parameter_monitor, data['parameter_monitor']):
-            print("Same monitor configurations, the results will be overwritten")
+        # Check if the response is valid
+        while response not in ['y', 'n']:
+            if response == 'd':
+                with open(parameter_simulation['path_result']+'/parameter.json', "r") as f:
+                    data = json.load(f)
+                print(data)
+                response = builtins.input("Do you want to continue (and overwrite)? (Y/N): ").strip().lower()
+            else:
+                print("Invalid input. Please enter Y, D or N.")
+                response = builtins.input("Do you want to continue? (Y/D/N): ").strip().lower()
+        
+        # Check the user's response
+        if response == 'n':
+            raise Exception("Try a different path")
+        elif response == 'y':
+            print("Overwriting...")
+            f = open(parameter_simulation['path_result']+'/parameter.json',"w")
+            f.write("{\n")
+            for name,dic in [('parameter_simulation',parameter_simulation),
+                            ('parameter_model',parameter_model),
+                            ('parameter_connection_between_region',parameter_connection_between_region),
+                            ('parameter_coupling',parameter_coupling),
+                            ('parameter_integrator',parameter_integrator),
+                            ('parameter_monitor',parameter_monitor)]:
+                f.write('"'+name+'" : ')
+                try:
+                    json.dump(dic, f)
+                    f.write(",\n")
+                except TypeError:
+                    print("not serialisable")
+            if stimulation is not None:
+                f.write('"parameter_stimulation" : ')
+                json.dump(parameter_stimulation, f)
+                f.write(",\n")
+
+            f.write('"myseed":'+str(my_seed)+"\n}\n")
             f.close()
-        elif not compare_dicts(parameter_monitor, data['parameter_monitor']):
-            
-            print("Adding new monitors ")
-
-            if data['parameter_monitor']['Raw']==True and parameters.parameter_monitor['Raw']==True:
-                print("overwriting Raw")
-                data['parameter_monitor']['Raw'] = True #there will be a raw monitor
-            
-            if data['parameter_monitor']['TemporalAverage']==True and parameters.parameter_monitor['TemporalAverage']==True:
-                print("overwriting TempAvg")
-                data['parameter_monitor']['parameter_TemporalAverage'] = parameters.parameter_monitor['parameter_TemporalAverage']
-            elif data['parameter_monitor']['TemporalAverage']==False and parameters.parameter_monitor['TemporalAverage']==True:
-                print("Adding TempAvg")
-                data['parameter_monitor']['parameter_TemporalAverage'] = parameters.parameter_monitor['parameter_TemporalAverage']
-            
-            if data['parameter_monitor']['Bold']==True and parameters.parameter_monitor['Bold']==True:
-                print("overwriting Bold")
-                data['parameter_monitor']['parameter_Bold'] = parameters.parameter_monitor['parameter_Bold']
-            elif data['parameter_monitor']['Bold']==False and parameters.parameter_monitor['Bold']==True:
-                print("Adding Bold")
-                data['parameter_monitor']['parameter_Bold'] = parameters.parameter_monitor['parameter_Bold']
-
-            with open(parameter_simulation['path_result']+'/parameter.json', "w") as f:
-                json.dump(data, f, indent=4) 
-                f.close()
-
-
 
     #initialize the simulator: edited by TA and Jen, added stimulation argument, try removing surface
     if initial_condition == None:

@@ -320,8 +320,11 @@ def run_simulation(simulator, time, parameter_simulation,parameter_monitor):
             for i in range(nb_monitor):
                 save_result.append([])
             count +=1
+    
     # save the last part
     np.save(parameter_simulation['path_result']+'/step_'+str(count)+'.npy',np.array(save_result, dtype='object') , allow_pickle = True)
+    if count < int(time/parameter_simulation['save_time'])+1:
+        np.save(parameter_simulation['path_result']+'/step_'+str(count+1)+'.npy',np.array([], dtype='object'))
 
 def get_result(path,time_begin,time_end, prints=0):
     '''
