@@ -5,13 +5,13 @@ import argparse
 
 start_scope()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--b_e', type=float, default=0.0, help='adaptation')
-parser.add_argument('--iext', type=float, default=0.5, help='external input')
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--b_e', type=float, default=0.0, help='adaptation (pA)')
+parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
 
-parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay')
-parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay')
-parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation')
+parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay (ms)')
+parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay (ms)')
+parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
 args = parser.parse_args()
 
 b_e = args.b_e

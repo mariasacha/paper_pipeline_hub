@@ -11,6 +11,9 @@ import numpy.random as rgn
 import tvb.simulator.lab as lab
 from IPython.display import clear_output
 import builtins 
+from scipy.signal import butter, sosfilt
+from scipy.stats import zscore
+
 
 # prepare firing rate
 def bin_array(array, BIN, time_array):
@@ -596,13 +599,13 @@ def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
     print(f'\nThese arrays have shape: time_points x number_of_nodes: {shape}')
 
 def create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of='tau_e', 
-               Iext = 0.000315,nseed=10, additional_path_folder=''):
+               Iext = 0.000315,nseed=10, additional_path_folder='', return_TR=False):
     """
     parameters: the parameters of the model
     param : tuple, in the form of (i, [b_e, tau])
-    result: the result with all the parametrizations, all the monitors, variables
+    result: the result with all the parametrizations, and the selected monitors and selected variables
     monitor: the selected monitor (string)
-    for_explan: tuple, from the get_result function, to catch all the monitors that have been used in the get_result
+    for_explan: tuple, from the get_result function, to catch all the monitors that have been used in the get_result (parameter_monitor,vars_int,Nnodes)
     var_select: the variables to be plotted
     change_of: str, 'tau_e' if you change values of tau_e, 'tau_i' otherwise
     return a dictionary with key the selected variables, 
@@ -647,22 +650,31 @@ def create_dicts(parameters,param, result, monitor, for_explan, var_select, chan
     for var in var_select:
         result_fin[var] = result[list_vars[var]]
 
-    return result_fin
+    if return_TR:
+        TR= parameter_monitor["parameter_Bold"]["period"]
+        return result_fin,TR
+    else:
+        return result_fin
 
 def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,cut_transient, run_sim, change_of='tau_e', 
-               Iext = 0.000315,nseed=10, additional_path_folder=''):
-    
+               Iext = 0.000315,nseed=10, additional_path_folder='',figsize=(8,5), desired_time=0):
+    """
+    desired_time: in s, plot from a specific time point
+    """
     rows =int(len(params))
-
     cols = len(var_select) 
     if 'E' and 'I' in var_select:
         cols = cols-1 #put E and I in the same plot
-    
+    single_plot=False
     if cols == 1:
-        rows=1
-        cols=2
+        if rows>1:
+            cols=rows
+            rows=1
+        else:
+            cols=2
+            single_plot=True
 
-    fig, axes = plt.subplots(rows,cols,figsize=(8,5))
+    fig, axes = plt.subplots(rows,cols,figsize=figsize)
     
     for param in enumerate(params):
         #load results for the params
@@ -673,13 +685,16 @@ def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,
         var_ind_list = {}
         j =0
         for var in var_select:
-            ax_index = i if len(axes.shape) ==1 else (i, j )#that means that you have one row or one col
+            if len(axes.shape) ==1:
+                ax_index = i
+                i +=1 
+            else: 
+                ax_index= (i, j )#that means that you have one row or one col
             if (var == 'E' and 'I' in var_ind_list.keys()) or (var == 'I' and 'E' in var_ind_list.keys()):
                 continue
             else:
                 var_ind_list[var] = ax_index
                 j+=1
-        
         #if E and I in the vars, plot them in the same subplot
         if 'E' and 'I' in result_fin.keys():
             try:
@@ -689,9 +704,10 @@ def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,
                 ax_ind = var_ind_list['I']
                 del var_ind_list['I']
 
-            time_s = np.linspace(cut_transient, run_sim, result_fin['E'].shape[0])
-            Li = axes[ax_ind].plot(time_s,result_fin['I'],color='darkred', label='Inh') # [times, regions]
-            Le = axes[ax_ind].plot(time_s,result_fin['E'],color='SteelBlue', label='Exc') # [times, regions]
+            time_s = np.linspace(cut_transient, run_sim, result_fin['E'].shape[0])/1000
+            closest_index = np.argmin(np.abs(time_s - desired_time)) # index of the time point closest to the desired time
+            Li = axes[ax_ind].plot(time_s[closest_index:],result_fin['I'][closest_index:],color='darkred', label='Inh') # [times, regions]
+            Le = axes[ax_ind].plot(time_s[closest_index:],result_fin['E'][closest_index:],color='SteelBlue', label='Exc') # [times, regions]
             axes[ax_ind].set_ylabel('Firing rate (Hz)', fontsize=16)
             axes[ax_ind].set_title(change_of+ f'= {tau} ms, b_e={b_e}', fontsize=16)
             axes[ax_ind].legend([Li[0], Le[0]], ['Inh.','Exc.'], loc='upper right', fontsize='xx-small')
@@ -699,24 +715,29 @@ def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,
 
             for var in var_ind_list.keys():
                 ax_ind= var_ind_list[var]
-                Li = axes[ax_ind].plot(time_s,result_fin[var], label=var) # [times, regions]
+                time_s = np.linspace(cut_transient, run_sim,result_fin[var].shape[0])/1000    
+                closest_index = np.argmin(np.abs(time_s - desired_time)) # index of the time point closest to the desired time
+                Li = axes[ax_ind].plot(time_s[closest_index:],result_fin[var][closest_index:], label=var) # [times, regions]
                 axes[ax_ind].set_ylabel(var, fontsize=16)
                 axes[ax_ind].set_title(change_of+ f'= {tau} ms, b_e={b_e}', fontsize=16)
                 axes[ax_ind].legend([Li[0]], [var], loc='upper right', fontsize='xx-small') 
-
+        
         #else plot all the variables separately
         else:
             for var in var_ind_list.keys():
                 ax_ind= var_ind_list[var]
-                time_s = np.linspace(cut_transient, run_sim,result_fin[var].shape[0])
-                Li = axes[ax_ind].plot(time_s,result_fin[var], label=var) # [times, regions]
+                time_s = np.linspace(cut_transient, run_sim,result_fin[var].shape[0])/1000    
+                closest_index = np.argmin(np.abs(time_s - desired_time)) # index of the time point closest to the desired time
+                Li = axes[ax_ind].plot(time_s[closest_index:],result_fin[var][closest_index:], label=var) # [times, regions]
                 axes[ax_ind].set_ylabel(var, fontsize=16)
                 axes[ax_ind].set_title(change_of+ f'= {tau} ms, b_e={b_e}', fontsize=16)
                 axes[ax_ind].legend([Li[0]], [var], loc='upper right', fontsize='xx-small')    
     
-
     for ax in axes.reshape(-1):
-        ax.set_xlabel('Time (ms)')
+        ax.set_xlabel('Time (s)')
+
+    if single_plot:
+        fig.delaxes(axes[1])
 
     plt.tight_layout()
     plt.show()
@@ -860,46 +881,14 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
         model = model.Zerlaut_adaptation_second_order(variables_of_interest='E I C_ee C_ei C_ii W_e W_i noise'.split())
     else:
         raise Exception('Bad order for the model')
-
-    model.g_L=np.array(parameter_model['g_L'])
-    model.E_L_e=np.array(parameter_model['E_L_e'])
-    model.E_L_i=np.array(parameter_model['E_L_i'])
-    model.C_m=np.array(parameter_model['C_m'])
-    model.b_e=np.array(parameter_model['b_e'])
-    model.a_e=np.array(parameter_model['a_e'])
-    model.b_i=np.array(parameter_model['b_i'])
-    model.a_i=np.array(parameter_model['a_i'])
-    model.tau_w_e=np.array(parameter_model['tau_w_e'])
-    model.tau_w_i=np.array(parameter_model['tau_w_i'])
-    model.E_e=np.array(parameter_model['E_e'])
-    model.E_i=np.array(parameter_model['E_i'])
-    model.Q_e=np.array(parameter_model['Q_e'])
-    model.Q_i=np.array(parameter_model['Q_i'])
-    model.tau_e=np.array(parameter_model['tau_e'])
-    model.tau_i=np.array(parameter_model['tau_i'])
-    model.N_tot=np.array(parameter_model['N_tot'])
-    model.p_connect_e=np.array(parameter_model['p_connect_e'])
-    model.p_connect_i=np.array(parameter_model['p_connect_i'])
-    model.g=np.array(parameter_model['g'])
-    model.T=np.array(parameter_model['T'])
-    model.P_e=np.array(parameter_model['P_e'])
-    model.P_i=np.array(parameter_model['P_i'])
-    model.K_ext_e=np.array(parameter_model['K_ext_e'])
-    model.K_ext_i=np.array(parameter_model['K_ext_i'])
-    model.external_input_ex_ex=np.array(parameter_model['external_input_ex_ex'])
-    model.external_input_ex_in=np.array(parameter_model['external_input_ex_in'])
-    model.external_input_in_ex=np.array(parameter_model['external_input_in_ex'])
-    model.external_input_in_in=np.array(parameter_model['external_input_in_in'])
-    model.tau_OU=np.array(parameter_model['tau_OU'])
-    model.weight_noise=np.array(parameter_model['weight_noise'])
-    model.state_variable_range['E'] =np.array( parameter_model['initial_condition']['E'])
-    model.state_variable_range['I'] =np.array( parameter_model['initial_condition']['I'])
-    if parameter_model['order'] == 2:
-        model.state_variable_range['C_ee'] = np.array(parameter_model['initial_condition']['C_ee'])
-        model.state_variable_range['C_ei'] = np.array(parameter_model['initial_condition']['C_ei'])
-        model.state_variable_range['C_ii'] = np.array(parameter_model['initial_condition']['C_ii'])
-    model.state_variable_range['W_e'] = np.array(parameter_model['initial_condition']['W_e'])
-    model.state_variable_range['W_i'] = np.array(parameter_model['initial_condition']['W_i'])
+    # ------- Changed by Maria 
+    to_skip=['initial_condition', 'matteo', 'order']
+    for key, value in parameters.parameter_model.items():
+        if key not in to_skip:
+            setattr(model, key, np.array(value))
+    for key,val in parameters.parameter_model['initial_condition'].items():
+        model.state_variable_range[key] = val
+    
 
     ## Connection
     if parameter_connection_between_region['default']:
@@ -1084,7 +1073,16 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
             if response == 'd':
                 with open(parameter_simulation['path_result']+'/parameter.json', "r") as f:
                     data = json.load(f)
-                print(data)
+                list_param = [parameter_model,parameter_connection_between_region ,parameter_coupling ,parameter_integrator,parameter_monitor] 
+                list_data = [data['parameter_model'],data['parameter_connection_between_region'],data['parameter_coupling'],
+                             data['parameter_integrator'], data['parameter_monitor']]
+                list_names = ['model', 'connectivity', 'coupling', 'integrator', 'monitor']
+                #compare to see if indeed they have the same model parameters
+                for dic_param, dic_data, name in zip(list_param,list_data, list_names):
+                    no_diff = print_dict_differences(dic_param, dic_data)
+                    if no_diff:
+                        print('No differences in ', name)
+                print('If there are no differences you can safely continue: press Y')
                 response = builtins.input("Do you want to continue (and overwrite)? (Y/N): ").strip().lower()
             else:
                 print("Invalid input. Please enter Y, D or N.")
@@ -1134,6 +1132,28 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
         # end edit
     return simulator
 
+def print_dict_differences(dict1, dict2):
+    # Iterate through keys of the first dictionary
+    for key in dict1:
+        # Check if the key exists in the second dictionary
+        if key in dict2:
+            # Check if the values are different
+            if dict1[key] != dict2[key]:
+                print(f"Difference in key '{key}':")
+                print(f"   New dictionary value: {dict1[key]}")
+                print(f"   Preexisting dictionary value: {dict2[key]}")
+            else:
+                no_diff = True
+        else:
+            print(f"Key '{key}' not found in preexisting dictionary")
+            no_diff=False
+    # Check for keys in the second dictionary not present in the first
+    for key in dict2:
+        if key not in dict1:
+            print(f"Key '{key}' not found in new dictionary")
+            no_diff=False
+    return no_diff
+
 def compare_dicts(dict1, dict2):
     """
     Compare two dictionaries for equality.
@@ -1148,3 +1168,173 @@ def compare_dicts(dict1, dict2):
             return False
     
     return True
+
+def run_simulation_all(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.000315, 
+                      stimval = 0,stimdur = 50,stimtime_mean = 2500 ,stim_region = 5, n_nodes=68, 
+                      cut_transient=2000, run_sim=5000, nseed=10, additional_path_folder=''):
+                      
+    #                   parameters, b_e = b_e, tau_e = tau_e , n_nodes=Nnodes,
+    # cut_transient=cut_transient, run_sim=run_sim, additional_path_folder='Bold/', time, parameter_simulation,parameter_monitor):
+    '''
+    run a simulation
+    :param simulator: the simulator already initialize
+    :param time: the time of simulation
+    :param parameter_simulation: the parameter for the simulation
+    :param parameter_monitor: the parameter for the monitor
+    '''
+    print('Adjust Parameters')
+    parameters = adjust_parameters(parameters, b_e = b_e, tau_e = tau_e, tau_i = tau_i, Iext = Iext, stimval = stimval,
+                                   stimdur = stimdur,stimtime_mean = stimtime_mean ,stim_region = stim_region, n_nodes=n_nodes, 
+                      cut_transient=cut_transient, run_sim=run_sim, nseed=nseed, additional_path_folder=additional_path_folder)
+    
+    print('Initialize Simulator')
+    simulator = sim_init(parameters)
+    
+    print('Start Simulation')
+    parameter_simulation,parameter_monitor= parameters.parameter_simulation, parameters.parameter_monitor
+    time=run_sim
+
+    nb_monitor = parameter_monitor['Raw'] + parameter_monitor['TemporalAverage'] + parameter_monitor['Bold'] + parameter_monitor['Ca']
+    if 'Afferent_coupling' in parameter_monitor.keys() and parameter_monitor['Afferent_coupling']:
+        nb_monitor+=1
+    # initialise the variable for the saving the result
+    save_result =[]
+    for i in range(nb_monitor):
+        save_result.append([])
+    # run the simulation
+    count = 0
+    for result in simulator(simulation_length=time):
+        for i in range(nb_monitor):
+            if result[i] is not None:
+                save_result[i].append(result[i])
+        #save the result in file
+        if result[0][0] >= parameter_simulation['save_time']*(count+1): #check if the time for saving at some time step
+            print('simulation time :'+str(result[0][0])+'\r')
+            np.save(parameter_simulation['path_result']+'/step_'+str(count)+'.npy',np.array(save_result, dtype='object'), allow_pickle = True)
+            save_result =[]
+            for i in range(nb_monitor):
+                save_result.append([])
+            count +=1
+    
+    # save the last part
+    np.save(parameter_simulation['path_result']+'/step_'+str(count)+'.npy',np.array(save_result, dtype='object') , allow_pickle = True)
+    if count < int(time/parameter_simulation['save_time'])+1:
+        np.save(parameter_simulation['path_result']+'/step_'+str(count+1)+'.npy',np.array([], dtype='object'))
+    
+    clear_output(wait=True)
+    print(f"Simulation Completed successfully", flush=True)
+
+def butter_bandpass(lowend, highend, TR, order=5):
+        fnq = 0.5/ TR 
+        Wn = [lowend / fnq, highend / fnq]
+        sos = butter(order,Wn, analog=False, btype='band', output='sos')
+        return sos
+
+def butter_bandpass_filter(data, lowcut, highcut, TR, order=5):
+        sos = butter_bandpass(lowcut, highcut, TR, order=order)
+        y = sosfilt(sos, data)
+        return y
+
+def bandpass_timeseries(ts, TR, lowend=0.04, highend=0.07, order = 5):
+    """
+    Bandpass BOLD signal timeseries
+
+    Parameters:
+    - ts: BOLD signal data with shape (N, T)
+    - TR: repetition time in seconds
+    - lowend: lowest frequency in Hz; default 0.008
+    - highend: highest frequency in Hz; default 0.09
+
+    Returns:
+    - filtered_timeseries: bandpass-filtered timeseries with shape (N, T)
+    """
+    filtered_timeseries = np.zeros_like(ts, dtype=float)
+
+    
+    for ROI in range(ts.shape[0]):
+        filtered_timeseries[ROI, :] = butter_bandpass_filter(ts[ROI, :], lowend, highend, TR, order=order) 
+    
+    return filtered_timeseries
+
+def preprocess_bold(ts, TR, apply_bandpass_YN=True):
+    """
+    ts: time series in the shape (nodes, time_points)
+    """
+    # Get the dimensions of the BOLD signal data
+    # ts=ts.T
+    T,N= ts.shape
+    print(T,N)
+    # Step 1 - Narrowband filter
+    if apply_bandpass_YN:
+        ts = bandpass_timeseries(ts, TR)
+
+    # Step 2 - Z-score
+    Zscored_timeseries = np.zeros_like(ts)
+    for roi in range(N):
+        Zscored_timeseries[roi, :] = zscore(ts[roi, :]) 
+        # Zscored_timeseries[roi, :] =(ts[roi, :] - np.mean(ts[roi, :])) / np.std(ts[roi, :])
+    return Zscored_timeseries
+
+def corr_sc_fc(BOLD_signal, TR, SC):
+
+    signal = preprocess_bold(BOLD_signal, TR, apply_bandpass_YN=False) #check the shape, maybe you need to T
+    # signal= BOLD_signal
+    FC=np.corrcoef(signal.T)
+
+    pearson_FCSC = np.corrcoef(FC.flatten(), SC.flatten()) #this will be a matrix
+    coef = pearson_FCSC[0, 1]
+
+    return FC, coef
+
+def plot_FC_SC(parameters,params, result,  for_explan, cut_transient, run_sim,SC, var_select = 'E', monitor = 'Bold', change_of='tau_e', 
+               Iext = 0.000315,nseed=10, additional_path_folder='',figsize=(8,5), desired_time=0):
+    """
+    desired_time: in s, plot from a specific time point
+    """
+    rows =int(len(params))
+    cols = 2 
+    # simulator = sim_init(parameters)
+    # SC=simulator.connectivity.weights
+    fig, axes = plt.subplots(rows,cols,figsize=figsize)
+    
+    for param in enumerate(params):
+        #load results for the params
+        (i, [b_e, tau]) = param 
+        result_fin,TR = create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of=change_of, Iext = Iext,
+                                  nseed=nseed, additional_path_folder=additional_path_folder, return_TR=True)
+        
+        TR = TR*1e-3
+        time_s = np.linspace(cut_transient, run_sim,result_fin[var_select].shape[0])/1000
+        closest_index = np.argmin(np.abs(time_s - desired_time)) 
+        bold_sig = result_fin[var_select][closest_index:]
+
+        #Take FC and coeff
+        FC, coef = corr_sc_fc(bold_sig, TR, SC)
+
+        #create list with the indices for each variable
+
+        # for var in var_select:
+        if len(axes.shape) ==1:
+            ax_index_fc =i
+            ax_index_sc = 1
+            im1 = axes[ax_index_fc].imshow(FC, cmap = "seismic", vmin = -1, vmax = 1, 
+                   interpolation = 'nearest', origin='lower');
+            im2 = axes[ax_index_sc].imshow(SC, cmap = "jet");
+            
+        else: 
+            ax_index_fc= (i, 0)#that means that you have one row or one col
+            ax_index_sc= (i, 1)
+            im1 = axes[ax_index_fc].imshow(FC, cmap = "seismic", vmin = -1, vmax = 1, 
+                   interpolation = 'nearest', origin='lower');
+            im2 = axes[ax_index_sc].imshow(SC, cmap = "jet");
+        
+        if i ==0:
+            axes[ax_index_fc].set_title("FC of Simulated Bold\n"+change_of+ f'= {tau} ms, b_e={b_e}' , fontsize=13)
+            axes[ax_index_sc].set_title('Structural Connactivity'+f'\nPcoef_SCFC={round(coef,3)}', fontsize=13)
+        else:
+            axes[ax_index_fc].set_title(change_of+ f'= {tau} ms, b_e={b_e}' , fontsize=13)
+            axes[ax_index_sc].set_title(f'\nPcoef_SCFC={round(coef,3)}', fontsize=13)
+        fig.colorbar(im1, ax=axes[ax_index_fc])
+        fig.colorbar(im2, ax=axes[ax_index_sc])
+    plt.tight_layout()
+    plt.show()
