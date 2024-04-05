@@ -13,13 +13,30 @@ from IPython.display import clear_output
 import builtins 
 from scipy.signal import butter, sosfilt
 from scipy.stats import zscore
-
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.io as pio
 
 # prepare firing rate
 def bin_array(array, BIN, time_array):
     N0 = int(BIN/(time_array[1]-time_array[0]))
     N1 = int((time_array[-1]-time_array[0])/BIN)
     return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
+
+def heaviside(x):
+    return 0.5 * (1 + np.sign(x))
+   
+   
+def input_rate(t, t1_exc, tau1_exc, tau2_exc, ampl_exc, plateau):
+    # t1_exc=10. # time of the maximum of external stimulation
+    # tau1_exc=20. # first time constant of perturbation = rising time
+    # tau2_exc=50. # decaying time
+    # ampl_exc=20. # amplitude of excitation
+    inp = ampl_exc * (np.exp(-(t - t1_exc) ** 2 / (2. * tau1_exc ** 2)) * heaviside(-(t - t1_exc)) + \
+        heaviside(-(t - (t1_exc+plateau))) * heaviside(t - (t1_exc))+ \
+        np.exp(-(t - (t1_exc+plateau)) ** 2 / (2. * tau2_exc ** 2)) * heaviside(t - (t1_exc+plateau)))
+    return inp
 
 def detect_UP(train_cut, ratioThreshold=0.4,
               sampling_rate=1., len_state=50.,
@@ -453,6 +470,11 @@ def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.00
     
     print(sim_name)
     parameters.parameter_simulation['path_result'] = folder_root + '/' + sim_name + '/' +additional_path_folder
+
+    try:
+        os.listdir(parameters.parameter_simulation['path_result'])
+    except:
+        os.makedirs(parameters.parameter_simulation['path_result'])
 
     parameters.parameter_model['b_e'] = b_e
 
@@ -1194,6 +1216,9 @@ def run_simulation_all(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.0
     parameter_simulation,parameter_monitor= parameters.parameter_simulation, parameters.parameter_monitor
     time=run_sim
 
+    if stimval:
+        print ('    Stimulating for {1} ms, {2} nS in the {0}\n'.format(simulator.connectivity.region_labels[stim_region],parameters.parameter_stimulus['tau'],stimval))
+
     nb_monitor = parameter_monitor['Raw'] + parameter_monitor['TemporalAverage'] + parameter_monitor['Bold'] + parameter_monitor['Ca']
     if 'Afferent_coupling' in parameter_monitor.keys() and parameter_monitor['Afferent_coupling']:
         nb_monitor+=1
@@ -1338,3 +1363,161 @@ def plot_FC_SC(parameters,params, result,  for_explan, cut_transient, run_sim,SC
         fig.colorbar(im2, ax=axes[ax_index_sc])
     plt.tight_layout()
     plt.show()
+
+def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='./network_sims/', 
+                            BIN = 5, AmpStim = 1,offset_index= 61, load_until = 399  ):
+    """
+    calculate the survival time
+
+    bvals : values of b_e, list or array
+    tau_values : values of tau_e (then tau_i_iter=False) or tau_i (then tau_i_iter=True)
+    tau_i_iter: (bool) True for iterating the tau_i
+    Nseeds: list or array
+    path: where the network sims were saved
+    BIN: int,  used for the saving / binning of network simulations
+    AmpStim: float, the amplitude of the kick
+    offset_index: int, time that the stimulus stops : (time_of_peek + plateau + BIN)/BIN
+    load_until: int, to make sure that you load the same length of all the arrays (here duration/BIN)
+
+    the result is an array with shape (tau_vals, bvals) which contains the average survival time for
+    each combination of tau/b_e
+    """
+    if tau_i_iter:
+        tauv = tau_values
+        tau_str = 'tau_i'
+    else:
+        tauv = tau_values
+        tau_str = 'tau_e'
+
+
+    allseeds = []
+
+    for nseed in Nseeds:
+        print("Seed = ", nseed)
+        dur_dead_tau = []
+
+        for tau in tauv:
+            print(f"loop of {tau_str} = ", tau)
+            dur_dead = []
+
+            for b_ad in bvals:
+
+                if tau_i_iter:
+                    tau_E = 5.0
+                    tau_I = tau
+                else:
+                    tau_E = tau
+                    tau_I = 5.0
+
+                sim_name = f"b_{b_ad}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
+                name_exc = save_path + sim_name + '_exc.npy'
+                name_inh = save_path + sim_name + '_inh.npy'
+
+                #Using the exc FR but can use the inh instead
+                popRateG_exc = np.load(path + name_exc)[:load_until] 
+                # popRateG_inh = np.load(path + name_inh)[:load_until]
+                
+                thresh = popRateG_exc[offset_index] / 10
+                consecutive_count = sum(1 for value in popRateG_exc[offset_index:] if value > thresh)
+                dur_until_dead = consecutive_count * BIN  # bin=5ms
+
+                dur_dead.append(dur_until_dead)
+
+            dur_dead_tau.append(dur_dead)
+
+        dead_dur = np.array(dur_dead_tau).T
+        allseeds.append(dead_dur)
+
+    allseeds_arr = np.array(allseeds)
+
+    mean_array = np.mean(allseeds_arr, axis=0)
+
+    np.save(f"./{tau_str}_mean_array.npy", mean_array)
+
+def load_survival( load = 'tau_e', precalc_mar=True):
+    if precalc_mar:
+        if load == 'tau_e':
+            mean_array = np.load('./dynamical_precalc/mean_array_tau_e.npy')
+            taus = list(np.load('./dynamical_precalc/taues_bcrit.npy'))
+            bthr = list(np.load('./dynamical_precalc/bthr_taues_bcrit.npy'))
+
+            tau_v = np.arange(3.5,7.0,0.1)
+            bvals = np.arange(0,30,1)
+        elif load == 'tau_i':
+            mean_array = np.load('./dynamical_precalc/mean_array_tau_i.npy')
+            taus = list(np.load('./dynamical_precalc/tauis_bcrit.npy'))
+            bthr = list(np.load('./dynamical_precalc/bthr_tauis_bcrit.npy'))
+
+            bvals = np.arange(0,25,1)
+            tau_v = np.arange(3.,9.,0.1)
+
+    return mean_array,taus, bthr, tau_v, bvals
+
+def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , save_im=False):
+    colorscale='hot'
+    if load == 'tau_i': 
+        colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
+        x_heat = tau_v
+        x_trace=tauis[17:]  
+        y_trace=bthr[17:]
+        title_fig ='τᵢ (ms)'
+        x_ticks = 12
+        y_ticks = 12    
+    elif load=='tau_e':
+        colorscale = 'hot'
+        x_heat = tau_v
+        x_trace = tauis[3:-15]
+        y_trace = bthr[3:-15]
+        title_fig='τₑ (ms)'
+        x_ticks = 16
+        y_ticks = 10
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(go.Heatmap(
+            z=mean_array, zmin=mean_array.min(), zmax=1000,
+        x = x_heat, y=bvals, 
+            colorscale=colorscale, colorbar=dict(tickfont=dict(size=19), tickcolor='black')))
+
+    fig.add_trace(go.Scatter(
+        mode='lines', 
+        x=x_trace, 
+        y=y_trace,
+        line=dict(color='white',width=2)), secondary_y=False,)
+
+    matplotlib_figsize = (6, 3.5)
+    inch_to_pixels = 80
+
+    plotly_width = matplotlib_figsize[0] * inch_to_pixels
+    plotly_height = matplotlib_figsize[1] * inch_to_pixels
+
+
+    fig.update_layout( 
+            height = plotly_height, width = plotly_width,
+            xaxis=dict(
+                title=title_fig,
+                showgrid=False,
+                tickfont=dict(size=19, color='black'),  # Customize tick label fontsize
+                nticks=x_ticks),
+            yaxis=dict(
+                title='bₑ (pA)',  # Update the y-axis title
+                tickfont=dict(size=19, color='black'),  # Customize tick label fontsize
+                nticks=y_ticks),
+            coloraxis_colorbar_title_side="right",
+            coloraxis_colorbar_x=-0.55,  # Change the horizontal position (0 to 1)
+            coloraxis_colorbar_y=0.35
+                        )
+
+    fig.update_xaxes(title_text=title_fig,title_font=dict(size=20,color='black', family='Arial, sans-serif'), showgrid=False)
+    fig.update_yaxes(title_text='bₑ (pA)',title_font=dict(size=20,color='black', family='Arial, sans-serif'), showgrid=False)
+
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, b=0, t=0),  # Set all margins to 0 to remove white space
+    )
+    custom_margins = dict(l=0, r=0, t=0.1, b=0)
+
+    if save_im:
+        pio.write_image(fig, file_path)
+
+    fig.show()

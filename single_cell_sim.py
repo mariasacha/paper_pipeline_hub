@@ -2,10 +2,13 @@ from brian2 import *
 import matplotlib.pyplot as plt
 from functions import *
 import argparse
+import numpy as np
 
 start_scope()
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+parser.add_argument('--type', type=str, default='RS', help='type of cell (RS or FS)')
 parser.add_argument('--b_e', type=float, default=60, help='adaptation (pA)')
 parser.add_argument('--iext', type=float, default=0.3, help='input current (nA)')
 
@@ -19,6 +22,7 @@ Iext = args.iext
 tau_e = args.tau_e
 tau_i = args.tau_e
 TotTime = args.time
+type = args.type
 
 tau = 10*ms
 C = 200*pF
@@ -62,13 +66,42 @@ G_exc.EL=EL_e*mV
 G_exc.TsynI =5*ms
 G_exc.TsynE =5*ms
 
-statemon = StateMonitor(G_exc, 'vm', record=0)
-spikemon = SpikeMonitor(G_exc)
 
-run(TotTime*ms)
 
-plot(statemon.t/ms, statemon.vm[0])
-for t in spikemon.t:
-    axvline(t/ms, ls='--', c='C1', lw=3)
+G_inh = NeuronGroup(1, model=eqs, threshold='vm > Vcut',refractory=5*ms,
+                     reset="vm = Vr; w += b", method='heun')
+G_inh.vm = -65*mV#EL
+G_inh.w = a * (G_inh.vm - G_inh.EL)
+G_inh.Vr = -65*mV #
+G_inh.TsynI =5*ms
+G_inh.TsynE =5*ms
+G_inh.b=0*pA
+G_inh.DeltaT=0.5*mV
+G_inh.VT=-50.*mV
+# G_inh.Vcut=G_inh.VT + 5 * G_inh.DeltaT
+G_inh.Vcut=-30*mV
+G_inh.EL=EL_i*mV
+
+
+
+
+if type == 'RS':
+    statemon_exc = StateMonitor(G_exc, 'vm', record=0)
+    spikemon_exc = SpikeMonitor(G_exc)
+    
+    run(TotTime*ms)
+
+    plot(statemon_exc.t/ms, statemon_exc.vm[0])
+    for t in spikemon_exc.t:
+        axvline(t/ms, ls='--', c='C1', lw=3)
+elif type =='FS':
+    statemon_inh = StateMonitor(G_inh, 'vm', record=0)
+    spikemon_inh = SpikeMonitor(G_inh)
+
+    run(TotTime*ms)
+
+    plot(statemon_inh.t/ms, statemon_inh.vm[0])
+    for t in spikemon_inh.t:
+        axvline(t/ms, ls='--', c='C1', lw=3)
 xlabel('Time (ms)')
 ylabel('vm');
