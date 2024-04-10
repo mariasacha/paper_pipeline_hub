@@ -4,21 +4,40 @@ import os
 from functions import *
 import argparse 
 
+def get_np_arange(value):
+   """
+   solution to input np.arange in the argparser 
+   """
+   try:
+       values = [float(i) for i in value.split(',')]
+       assert len(values) in (1, 3)
+   except (ValueError, AssertionError):
+       raise argparse.ArgumentTypeError(
+           'Provide a CSV list of 1 or 3 integers'
+       )
+
+   # return our value as is if there is only one
+   if len(values) == 1:
+       return np.array(values)
+
+   # if there are three - return a range
+   return np.arange(*values)
+
 start_scope()
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 #range of values
-parser.add_argument('--b_e_range', type=np.array , default=np.arange(0,30,step=1), help='b_e range of values')
-parser.add_argument('--tau_e_range', type=np.array , default=np.arange(5.,7.,step=10), help='tau_e range of values \
+parser.add_argument('--b_e_range', type=get_np_arange , default='0,30,1', help='b_e range of values')
+parser.add_argument('--tau_e_range', type=get_np_arange , default='5.,7.,10', help='tau_e range of values \
 					- if you iterate tau_i then set  tau_e_range=np.arange(5.,10.,step=500)')
-parser.add_argument('--tau_i_range', type=np.array , default=np.arange(3.,9.,step=0.1), help='tau_i range of values \
+parser.add_argument('--tau_i_range', type=get_np_arange , default='3.,9.,0.1', help='tau_i range of values \
 					- if you iterate tau_e then set tau_i_range=np.arange(5.,10.,step=500)')
-parser.add_argument('--nseeds', type=np.array , default=np.arange(0,100,5), help='seed values')
+parser.add_argument('--nseeds', type=get_np_arange , default='0,100,5', help='seed values')
 
 #Other
 parser.add_argument('--time', type=float, default=2000, help='Total Time of simulation (ms)')
-parser.add_argument('--save_path', type=str, default='./network_sims/', help='Path to save the results of the simulations')
+parser.add_argument('--save_path', type=str, default='./', help='Path to save the results of the simulations')
 parser.add_argument('--overwrite', type=bool, default=False, help='If True it will overwrite the existant paths')
 parser.add_argument('--surv_time_calc', type=bool, default=False, help='If True calculate the survival time and save it')
 
@@ -28,7 +47,7 @@ surv_time_calc = args.surv_time_calc
 TotTime = args.time
 duration = TotTime*ms
 save_path = args.save_path
-OVERWRITE = args.overwrit
+OVERWRITE = args.overwrite
 BIN=5
 #Choose the values of the scan
 tauIv=args.tau_i_range
@@ -41,6 +60,7 @@ if len(tauIv) > 1 and len(tauEv)>1:
 
  
 #Create the kick
+DT=0.1
 AmpStim = 1
 plat = 100
 TauP=20
@@ -92,11 +112,16 @@ combinations = [(nseed, tau_I, b_ad, tau_E) for b_ad in bvals for tau_I in tauIv
 for nseed, tau_I, b_ad, tau_E in combinations:
 	print(f"b_e={b_ad}, tau_e={tau_E}, tau_i={tau_I}, seed={nseed}")
 
-	seed(nseed)
+	seed(int(nseed))
 
 	sim_name = f"b_{b_ad}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
-	str1 = save_path + sim_name + '_exc.npy'
-	str2 = save_path + sim_name + '_inh.npy'
+	str1 = save_path + 'network_sims/' +sim_name + '_exc.npy'
+	str2 = save_path + 'network_sims/' +sim_name + '_inh.npy'
+
+	try:
+		os.listdir(save_path+'network_sims/')
+	except:
+		os.makedirs(save_path+'network_sims/')
 
 	#check if the path exists already
 	if os.path.exists(str1) and os.path.exists(str2) and not OVERWRITE:
@@ -195,7 +220,11 @@ for nseed, tau_I, b_ad, tau_E in combinations:
 	np.save(str2,popRateG_inh )
 
 #Save also the time_array
-np.save(save_path + sim_name + '_time.npy', TimBinned)
+if os.path.exists(save_path + 'network_sims/'+ sim_name + '_time.npy') and not OVERWRITE:
+	print("binned time array exists")
+	pass
+else:
+	np.save(save_path + 'network_sims/'+ sim_name + '_time.npy', TimBinned)
 
 if surv_time_calc:
 	print("calculating survival times")
@@ -206,9 +235,14 @@ if surv_time_calc:
 	if len(tauEv)==1 and len(tauIv)>1:
 		tau_i_iter = True
 		tau_values = tauIv
+		tau_str = "tau_i"
 	elif len(tauEv)>1 and len(tauIv)==1:
 		tau_i_iter = False
 		tau_values = tauEv
+		tau_str = "tau_e"
 
 	calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path=save_path, 
                             BIN = BIN, AmpStim = AmpStim, offset_index= offset_index, load_until = load_until)
+
+clear_output(wait=False)
+print(f"Done! Network simulations are saved in {save_path}/network_sims/ \nsurvival time ({tau_str}_mean_array.npy) \nwith the respective values of b_e ({tau_str}_heatmap_bvals.npy) and \n{tau_str}s ({tau_str}_heatmap_taus.npy) in {save_path}")

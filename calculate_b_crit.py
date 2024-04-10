@@ -4,7 +4,30 @@ from math import erf
 import argparse
 from scipy import optimize
 import os
+from IPython.display import clear_output
 
+
+"""
+returns array of type [[tau_e_1, tau_i_1, b_crit_1], [tau_e_2, tau_i_2, b_crit_2], ..., [tau_e_n, tau_i_n, b_crit_n]]
+"""
+def get_np_arange(value):
+   """
+   solution to input np.arange in the argparser 
+   """
+   try:
+       values = [float(i) for i in value.split(',')]
+       assert len(values) in (1, 3)
+   except (ValueError, AssertionError):
+       raise argparse.ArgumentTypeError(
+           'Provide a CSV list of 1 or 3 integers'
+       )
+
+   # return our value as is if there is only one
+   if len(values) == 1:
+       return np.array(values)
+
+   # if there are three - return a range
+   return np.arange(*values)
 
 def TF_2(finh,fexc,fext,fextin,P,adapt,El):
 
@@ -47,14 +70,14 @@ def TF_2(finh,fexc,fext,fextin,P,adapt,El):
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 #range of values
-parser.add_argument('--b_e_range', type=np.array , default=np.arange(0,60,step=1), help='b_e range of values')
-parser.add_argument('--tau_e_range', type=np.array , default=np.arange(5.,7.,step=10), help='tau_e range of values \
+parser.add_argument('--b_e_range', type=get_np_arange , default='0,60,1', help='b_e range of values')
+parser.add_argument('--tau_e_range', type=get_np_arange , default='5,7,10',help='tau_e range of values \
 					- if you iterate tau_i then set  tau_e_range=np.arange(5.,10.,step=500)')
-parser.add_argument('--tau_i_range', type=np.array , default=np.arange(3.,9.,step=0.1), help='tau_i range of values \
+parser.add_argument('--tau_i_range', type=get_np_arange , default= '3,9,0.1', help='tau_i range of values \
 					- if you iterate tau_e then set tau_i_range=np.arange(5.,10.,step=500)')
 
 #Other
-parser.add_argument('--save_path', type=str, default='./', help='Path to save the results of the simulations')
+parser.add_argument('--save_path',  default='./', help='Path to save the results of the simulations')
 parser.add_argument('--overwrite', type=bool, default=False, help='If True it will overwrite the existant paths')
 
 args = parser.parse_args()
@@ -67,9 +90,10 @@ tauIv=args.tau_i_range
 tauEv=args.tau_e_range
 bvals = args.b_e_range
 
+
 if len(tauIv) > 1 and len(tauEv)>1:
-	print("Iterations for both tau_e and tau_i")
-	raise Exception("Change the tau_e_range or tau_i_range ")
+    print("Iterations for both tau_e and tau_i")
+    raise Exception("Change the tau_e_range or tau_i_range ")
 
 if len(tauEv)==1 and len(tauIv)>1:
     tau_i_iter = True
@@ -79,6 +103,12 @@ elif len(tauEv)>1 and len(tauIv)==1:
     tau_str = 'tau_e'
 
 file_name = save_path + f'b_thresh_{tau_str}.npy'
+
+try:
+    os.listdir(save_path)
+except:
+    os.makedirs(save_path)
+
 if os.path.exists(file_name) and not OVERWRITE:
     raise Exception("This file already exists. Set overwrite to True or change path")
 
@@ -127,12 +157,12 @@ store_npy = []
 for tau_I, tau_E in combinations:
     nuext = 0 
     nuextin = 0.
-
+    print(tau_I, tau_E)
     for b_e in bvals:
         
         bRS = b_e*1e-12 
-        Te = tau_I*1.e-3
-        Ti = tau_E*1.e-3
+        Ti = tau_I*1.e-3
+        Te = tau_E*1.e-3
 
         # print("running: ", sim_name)
         for nue in nuev:
@@ -152,10 +182,12 @@ for tau_I, tau_E in combinations:
 
         if all(i >= 0.00000000001 for i in deltanue): #this means that the curve would be below the bisector
             break
-    print("crit b = ", bRS)
+    print("crit b = ", b_e)
 
     store_npy.append([tau_E, tau_I, b_e])
 
 
 np.save(file_name, np.array(store_npy))
 
+clear_output(wait=False)
+print("Done! Saved in ", save_path)

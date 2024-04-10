@@ -1381,6 +1381,12 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 
     the result is an array with shape (tau_vals, bvals) which contains the average survival time for
     each combination of tau/b_e
+
+    original values for the script:
+    bvals = np.arange(0,30,step=1)
+    tauEv = np.arange(5.,7.,step=10)
+    tauIv= np.arange(3.,9.,step=0.1)
+    Nseeds = np.arange(0,100,5)
     """
     if tau_i_iter:
         tauv = tau_values
@@ -1410,11 +1416,22 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
                     tau_I = 5.0
 
                 sim_name = f"b_{b_ad}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
-                name_exc = save_path + sim_name + '_exc.npy'
+                name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
                 name_inh = save_path + sim_name + '_inh.npy'
 
                 #Using the exc FR but can use the inh instead
-                popRateG_exc = np.load(path + name_exc)[:load_until] 
+                try:
+                    popRateG_exc = np.load(name_exc)[:load_until]
+                except FileNotFoundError:
+                    try:
+                        sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{float(nseed)}"
+                        name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
+                        popRateG_exc = np.load(name_exc)[:load_until]
+                    except FileNotFoundError:
+                        sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
+                        name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
+                        popRateG_exc = np.load(name_exc)[:load_until]
+
                 # popRateG_inh = np.load(path + name_inh)[:load_until]
                 
                 thresh = popRateG_exc[offset_index] / 10
@@ -1432,10 +1449,16 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 
     mean_array = np.mean(allseeds_arr, axis=0)
 
-    np.save(f"./{tau_str}_mean_array.npy", mean_array)
 
-def load_survival( load = 'tau_e', precalc_mar=True):
-    if precalc_mar:
+    np.save(save_path + f"{tau_str}_mean_array.npy", mean_array)
+    np.save(save_path + f"{tau_str}_heatmap_bvals.npy", bvals)
+    np.save(save_path + f"{tau_str}_heatmap_taus.npy", tauv)
+
+    clear_output(wait=False)
+    print("Done! Saved in :", save_path)
+
+def load_survival( load = 'tau_e', precalc=False, save_path = './'):
+    if precalc:
         if load == 'tau_e':
             mean_array = np.load('./dynamical_precalc/mean_array_tau_e.npy')
             taus = list(np.load('./dynamical_precalc/taues_bcrit.npy'))
@@ -1450,27 +1473,49 @@ def load_survival( load = 'tau_e', precalc_mar=True):
 
             bvals = np.arange(0,25,1)
             tau_v = np.arange(3.,9.,0.1)
-
+    else:
+        mean_array = np.load(save_path + f'{load}_mean_array.npy')
+        bthr = list(np.load(save_path + f'b_thresh_{load}.npy')[:,-1])
+        tau_v = np.load(save_path + f'{load}_heatmap_taus.npy')
+        bvals = np.load(save_path + f'{load}_heatmap_bvals.npy')
+        if load == 'tau_e':
+            taus = list(np.load(save_path + f'b_thresh_{load}.npy')[:,0])
+        if load == 'tau_i':
+            taus = list(np.load(save_path + f'b_thresh_{load}.npy')[:,1])
+            taus = [i for i in taus if i <= tau_v.max()]
     return mean_array,taus, bthr, tau_v, bvals
 
-def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , save_im=False):
-    colorscale='hot'
+def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , precalc =False, save_im=False):
+    
     if load == 'tau_i': 
         colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
         x_heat = tau_v
-        x_trace=tauis[17:]  
-        y_trace=bthr[17:]
         title_fig ='τᵢ (ms)'
-        x_ticks = 12
-        y_ticks = 12    
+        if precalc: 
+            x_trace=tauis[17:]  
+            y_trace=bthr[17:]
+            x_ticks = 12
+            y_ticks = 12
+        else:
+            x_trace=tauis  
+            y_trace=bthr
+            x_ticks = int(len(x_trace))
+            y_ticks = int(len(y_trace))                
     elif load=='tau_e':
         colorscale = 'hot'
         x_heat = tau_v
-        x_trace = tauis[3:-15]
-        y_trace = bthr[3:-15]
         title_fig='τₑ (ms)'
-        x_ticks = 16
-        y_ticks = 10
+        if precalc:
+            x_trace = tauis[3:-15]
+            y_trace = bthr[3:-15]
+            x_ticks = 16
+            y_ticks = 10
+        else:
+            x_trace=tauis  
+            y_trace=bthr
+            x_ticks = int(len(x_trace))
+            y_ticks = int(len(y_trace)) 
+
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
