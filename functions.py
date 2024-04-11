@@ -620,6 +620,25 @@ def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
 
     print(f'\nThese arrays have shape: time_points x number_of_nodes: {shape}')
 
+def get_np_arange(value):
+   """
+   solution to input np.arange in the argparser 
+   """
+   try:
+       values = [float(i) for i in value.split(',')]
+       assert len(values) in (1, 3)
+   except (ValueError, AssertionError):
+       raise argparse.ArgumentTypeError(
+           'Provide a CSV list of 1 or 3 integers'
+       )
+
+   # return our value as is if there is only one
+   if len(values) == 1:
+       return np.array(values)
+
+   # if there are three - return a range
+   return np.arange(*values)
+
 def create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of='tau_e', 
                Iext = 0.000315,nseed=10, additional_path_folder='', return_TR=False):
     """
