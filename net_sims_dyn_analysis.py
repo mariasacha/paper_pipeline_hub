@@ -4,25 +4,6 @@ import os
 from functions import *
 import argparse 
 
-def get_np_arange(value):
-   """
-   solution to input np.arange in the argparser 
-   """
-   try:
-       values = [float(i) for i in value.split(',')]
-       assert len(values) in (1, 3)
-   except (ValueError, AssertionError):
-       raise argparse.ArgumentTypeError(
-           'Provide a CSV list of 1 or 3 integers'
-       )
-
-   # return our value as is if there is only one
-   if len(values) == 1:
-       return np.array(values)
-
-   # if there are three - return a range
-   return np.arange(*values)
-
 start_scope()
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
