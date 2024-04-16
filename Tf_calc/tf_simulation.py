@@ -1,14 +1,78 @@
-import matplotlib.pyplot as plt
 from brian2 import *
 import time
+import argparse 
+from Tf_calc.cell_library import get_neuron_params_double_cell
+from functions import get_np_linspace, bin_array
+import os
+
 start_scope()
+
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# parser.add_argument('--model', type=str, default='adex', help='model to run')
+parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
+parser.add_argument('--range_inh', type=get_np_linspace , default='0.1,30,60', help='inhibitory input values')
+parser.add_argument('--range_exc', type=get_np_linspace , default='0.1,30,60', help='excitatory input values')
+
+parser.add_argument('--time', type=float, default=10000, help='Total Time of simulation (ms)')
+parser.add_argument('--save_path', type=str, default='./', help='path to save results')
+parser.add_argument('--save_name', type=str, default='trial', help='name to save')
+args = parser.parse_args()
+
+CELLS = args.cells
+save_path = args.save_path
+save_name = args.save_name
+# eqs = get_model(MODEL)
+params = get_neuron_params_double_cell(CELLS)
+# Extract values from params for each key
+extracted_values = {}
+for key in params.keys():
+    extracted_values[key] = params[key]
+# Unpack extracted values into variables
+locals().update(extracted_values)
+
+range_inh = args.range_inh
+range_exc = args.range_exc
+TotTime = args.time
+
 start_time = time.time()
 
 DT=0.1 # time step
 defaultclock.dt = DT*ms
 
-TotTime=5000 #Simulation duration (ms)
 duration = TotTime*ms
+
+# C = Cm*pF
+# gL = Gl*nS
+# tauw = tau_w*ms
+# a =0.0*nS# 4*nS
+#b = 0.08*nA
+# I = 0.*nA
+# Ee=E_e*mV
+# Ei=E_i*mV
+
+i=0
+eqs="""
+dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+Is-w)/Cm :volt (unless refractory)
+dw/dt=(a*(vm-EL)-w)/tauw : amp
+dGsynI/dt = -GsynI/TsynI : siemens
+dGsynE/dt = -GsynE/TsynE : siemens
+TsynI:second
+TsynE:second
+Is:amp
+Cm:farad
+gL:siemens
+Vr:volt
+b:amp
+DeltaT:volt
+Vcut:volt
+VT:volt
+EL:volt
+a:siemens
+tauw:second
+Dt:volt
+Ee:volt
+Ei:volt
+"""
 
 
 FRout_inh=[]
@@ -17,108 +81,79 @@ muve=[]
 muvi=[]
 
 Adapt=[]
-Npts=60 #Resolution of the measured TF
-Npts2=60
-i=0
-finh = np.array([0.6779661 , 1.3559322 , 2.03389831, 2.71186441, 3.38983051,
-       4.06779661, 4.74576271, 5.42372881, 6.10169492, 6.77966102,
-       7.45762712, 8.13559322, 8.81355932, 9.49152542])
+Npts_e = len(range_exc) 
+Npts_i = len(range_inh)
 
-for rate_exc in linspace(0.1,10, 30):
+print(range_exc, range_inh)
+for rate_exc in range_exc:
 	print("rate exc =", rate_exc)
 	FRout_inh.append([])
 	FRout_exc.append([])
 	Adapt.append([])
 	muve.append([])	
 	muvi.append([])
-	for rate_inh in finh:
+	for rate_inh in range_inh:
 		print("rate inh =", rate_inh)
-		#(0.04*v**2+5*v+140-u-GsynE*(v-Ee)-GsynI*(v-Ei)-I)/Tn:1
-		eqs="""
-		dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+Is-w)/Cm :volt (unless refractory)
-		dw/dt=(a*(vm-EL)-w)/tauw : amp
-		dGsynI/dt = -GsynI/TsynI : siemens
-		dGsynE/dt = -GsynE/TsynE : siemens
-		TsynI:second
-		TsynE:second
-		Is:amp
-		Cm:farad
-		gL:siemens
-		Vr:volt
-		b:amp
-		DeltaT:volt
-		Vcut:volt
-		VT:volt
-		EL:volt
-		a:siemens
-		tauw:second
-		Dt:volt
-		Ee:volt
-		Ei:volt
-		"""
-		#Pvar:1
-		#Qi:1
-		#Qe:1
-		#"""
 
 		# Population 1 - Fast Spiking
 
 		G_inh = NeuronGroup(1, eqs, threshold='vm > Vcut',refractory=5*ms, reset="vm = Vr; w += b", method='heun')
-		G_inh.vm = -60 * mV  # EL
-		G_inh.w = 0.*nS * (G_inh.vm - G_inh.EL)
-		G_inh.Vr = -65 * mV  #
-		G_inh.TsynI = 5. * ms  # 5.0*ms
-		G_inh.TsynE = 4. * ms  # 5.0*ms
-		G_inh.b = 0 * pA
-		G_inh.DeltaT = 0.5 * mV
-		G_inh.VT = -50. * mV
-		G_inh.Vcut = G_inh.VT + 5 * G_inh.DeltaT
-		G_inh.EL = -65 * mV  # -65*mV#-67*mV
+		G_inh.vm = V_m * mV 
+		G_inh.w = a_i*nS * (G_inh.vm - G_inh.EL)
+		G_inh.Vr = V_r * mV  
+		G_inh.TsynI = tau_i * ms  
+		G_inh.TsynE = tau_e * ms  
+		G_inh.b = b_i * pA
+		G_inh.DeltaT = delta_i * mV
+		G_inh.VT = V_th * mV
+		G_inh.Vcut = Vcut_i * mV
+		G_inh.EL = EL_i * mV
 		G_inh.GsynI=0.0*nS
 		G_inh.GsynE=0.0*nS
-		G_inh.Ee=0.*mV
-		G_inh.Ei=-80.*mV
-		G_inh.Cm = 200.*pF
-		G_inh.gL = 10.*nS
-		G_inh.tauw = 500*ms #1000.*ms
-		G_inh.Is = 0.0*nA #2.50*nA #[0.0 for i in range(N2)]*nA
+		G_inh.Ee= E_e*mV
+		G_inh.Ei= E_i*mV
+		G_inh.Cm = Cm*pF
+		G_inh.gL = Gl*nS
+		G_inh.tauw = tau_w*ms 
+		G_inh.Is = 0.0*nA 
 
 
 		# Population 2 - Regular Spiking
 		G_exc = NeuronGroup(1, eqs, threshold='vm > Vcut', refractory=5*ms, reset="vm = Vr; w += b", method='heun')
-		G_exc.vm = -60*mV#EL
-		# G_exc.a = 4.0*nS
-		G_exc.w = 0.*nS * (G_exc.vm - G_exc.EL)
-		G_exc.Vr = -65*mV
-		G_exc.TsynI =5.*ms#5.0*ms
-		G_exc.TsynE =4.*ms#5.0*ms
-		G_exc.b=30*pA#60*pA
-		G_exc.DeltaT=2*mV
-		G_exc.VT=-50.*mV
-		G_exc.Vcut=G_exc.VT + 5 * G_exc.DeltaT
-		G_exc.EL=-64*mV#-65*mV#-63*mV
+		G_exc.vm = V_m*mV
+		G_exc.w = a_e*nS * (G_exc.vm - G_exc.EL)
+		G_exc.Vr = V_r*mV
+		G_exc.TsynI =tau_i*ms
+		G_exc.TsynE =tau_e*ms
+		G_exc.b=b_e*pA
+		G_exc.DeltaT=delta_e*mV
+		G_exc.VT=V_th*mV
+		G_exc.Vcut = Vcut_e * mV
+		G_exc.EL=EL_e*mV
 		G_exc.GsynI=0.0*nS
 		G_exc.GsynE=0.0*nS
-		G_exc.Ee=0.*mV
-		G_exc.Ei=-80.*mV
-		G_exc.Cm = 200.*pF
-		G_exc.gL = 10.*nS
-		G_exc.tauw = 500*ms #1000.*ms
-		G_exc.Is = 0.0*nA #2.50*nA #[0.0 for i in range(N2)]*nA
+		G_exc.Ee=E_e*mV
+		G_exc.Ei=E_i*mV
+		G_exc.Cm = Cm*pF
+		G_exc.gL = Gl*nS
+		G_exc.tauw = tau_w*ms 
+		G_exc.Is = 0.0*nA 
 			
+		P_inh = int(p_con*gei*Ntot)
+		P_exc = int(p_con*(1- gei)*Ntot)
 
 		# external drive--------------------------------------------------------------------------
 
-		P_ed_inh = PoissonGroup(100, rates=rate_inh*Hz) #5% of 2000 inh cells
-		P_ed_exc = PoissonGroup(400, rates=rate_exc*Hz) #5% of 8000 exc cells
+		P_ed_inh = PoissonGroup(P_inh, rates=rate_inh*Hz) #5% of 2000 inh cells
+		P_ed_exc = PoissonGroup(P_exc, rates=rate_exc*Hz) #5% of 8000 exc cells
 
 
 		# Network-----------------------------------------------------------------------------
 
 		# connections-----------------------------------------------------------------------------
 		#seed(0)
-		Qi=5.0*nS#e-6 #*nS
-		Qe=1.5*nS#e-6 #*nS
+		Qi=Q_i*nS
+		Qe=Q_e*nS
 
 		prbC=1. #1
 
@@ -186,20 +221,19 @@ for rate_exc in linspace(0.1,10, 30):
 	
 	if i % 1 == 0:
 		print(i)
-
+try:
+	os.listdir(save_path + 'data/')
+except:
+	os.makedirs(save_path + 'data/')
 #
-np.save('/DATA/Maria/fede_tau/data/ExpTF_Adapt_Nstp60_tau_e_4_b_30_vol3.npy', Adapt)
-np.save('/DATA/Maria/fede_tau/data/ExpTF_inh_Nstp60_tau_e_4_b_30_vol3.npy', FRout_inh)
-np.save('/DATA/Maria/fede_tau/data/ExpTF_exc_Nstp60_tau_e_4_b_30_vol3.npy', FRout_exc)
-np.save('/DATA/Maria/fede_tau/data/ExpTF_muve_Nstp60_tau_e_4_b_30_vol3.npy', muve)
-np.save('/DATA/Maria/fede_tau/data/ExpTF_muvi_Nstp60_tau_e_4_b_30_vol3.npy', muvi)
+np.save(f'{save_path}data/ExpTF_Adapt_{Npts_e}x{Npts_i}_{save_name}.npy', Adapt)
+np.save(f'{save_path}data/ExpTF_inh_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_inh)
+np.save(f'{save_path}data/ExpTF_exc_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_exc)
+np.save(f'{save_path}data/ExpTF_muve_{Npts_e}x{Npts_i}_{save_name}.npy', muve)
+np.save(f'{save_path}data/ExpTF_muvi_{Npts_e}x{Npts_i}_{save_name}.npy', muvi)
 
+np.save(f'{save_path}data/params_range_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
 
-# np.save('/DATA/Maria/fede_tau/data/lol.npy', Adapt)
-# np.save('/DATA/Maria/fede_tau/data/jkj.npy', FRout_inh)
-# np.save('/DATA/Maria/fede_tau/data/fg.npy', FRout_exc)
-# np.save('/DATA/Maria/fede_tau/data/hjg.npy', muve)
-# np.save('/DATA/Maria/fede_tau/data/tyt.npy', muvi)
 end_time = time.time()
 execution_time = end_time - start_time
 print("Execution time:", execution_time, "seconds")
