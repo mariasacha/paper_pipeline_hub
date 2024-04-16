@@ -4,6 +4,7 @@ import argparse
 from Tf_calc.cell_library import get_neuron_params_double_cell
 from functions import get_np_linspace, bin_array
 import os
+from IPython.display import clear_output
 
 start_scope()
 
@@ -84,7 +85,7 @@ Adapt=[]
 Npts_e = len(range_exc) 
 Npts_i = len(range_inh)
 
-print(range_exc, range_inh)
+# print(range_exc, range_inh)
 for rate_exc in range_exc:
 	print("rate exc =", rate_exc)
 	FRout_inh.append([])
@@ -106,7 +107,7 @@ for rate_exc in range_exc:
 		G_inh.b = b_i * pA
 		G_inh.DeltaT = delta_i * mV
 		G_inh.VT = V_th * mV
-		G_inh.Vcut = Vcut_i * mV
+		G_inh.Vcut = V_cut * mV
 		G_inh.EL = EL_i * mV
 		G_inh.GsynI=0.0*nS
 		G_inh.GsynE=0.0*nS
@@ -128,7 +129,7 @@ for rate_exc in range_exc:
 		G_exc.b=b_e*pA
 		G_exc.DeltaT=delta_e*mV
 		G_exc.VT=V_th*mV
-		G_exc.Vcut = Vcut_e * mV
+		G_exc.Vcut = V_cut * mV
 		G_exc.EL=EL_e*mV
 		G_exc.GsynI=0.0*nS
 		G_exc.GsynE=0.0*nS
@@ -195,7 +196,7 @@ for rate_exc in range_exc:
 		BIN=5
 		time_array = arange(int(TotTime/DT))*DT
 
-		print(test)
+		# print(test)
 		
 		LfrG_exc=array(FRG_exc.rate/Hz)
 		TimBinned,popRateG_exc=bin_array(time_array, BIN, time_array),bin_array(LfrG_exc, BIN, time_array)
@@ -232,11 +233,16 @@ np.save(f'{save_path}data/ExpTF_exc_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_ex
 np.save(f'{save_path}data/ExpTF_muve_{Npts_e}x{Npts_i}_{save_name}.npy', muve)
 np.save(f'{save_path}data/ExpTF_muvi_{Npts_e}x{Npts_i}_{save_name}.npy', muvi)
 
-np.save(f'{save_path}data/params_range_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
+np.save(f'{save_path}data/params_range_{Npts_e}x{Npts_i}_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
 
 end_time = time.time()
 execution_time = end_time - start_time
-print("Execution time:", execution_time, "seconds")
+
+if execution_time > 3600:
+	print("Execution time:", execution_time/3600, "hours")
+else:
+	print("Execution time:", execution_time/60, "minutes")
+
 
 
 
