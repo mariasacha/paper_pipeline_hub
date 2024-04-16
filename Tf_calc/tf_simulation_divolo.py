@@ -158,7 +158,7 @@ def generate_transfer_function(params,\
     for i in range(fiSim.size):
         Fe_eff[i][:] = feSim # we try it with this scaling
         e=1 # we start at fe=!0
-        while (e<JUMP.size):
+        while (e<JUMP.size): #while e < 9
             vec = np.zeros(SEED)
             vec[0]= single_experiment(t,\
                 Fe_eff[i][e]*(1-params['gei'])*params['pconnec']*params['Ntot'],

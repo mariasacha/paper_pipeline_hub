@@ -4,6 +4,26 @@ within this file
 """
 from __future__ import print_function
 
+def get_neuron_params_double_cell(NAME):
+    
+    if NAME == 'FS-RS': 
+        params = {#Cells
+            'V_m': -60, 'V_r': -65, 'Cm': 200, 'Gl': 10, 'tau_w': 500, 'V_th': -50, 'V_cut' : -30,
+                #Excitatory
+                  'a_e': 0,   'b_e': 30,  'delta_e': 2, 'EL_e': -64,
+                # Inhibitory
+                  'a_i': 0,'b_i': 0,'delta_i': 0.5,'EL_i': -65,
+                # Synaptic
+                   'tau_e': 5, 'tau_i': 5, 'E_e': 0, 'E_i': -80, 'Q_i': 5.0, 'Q_e': 1.5,
+                # Network
+                  'p_con': 0.05, 'gei': 0.2, 'Ntot': 10000}
+    else:
+        print('====================================================')
+        print('------------ CELL NOT RECOGNIZED !! ---------------')
+        print('====================================================')
+
+    return params.copy()
+    
 def get_neuron_params(NAME, name='', number=1, SI_units=False):
 
     if NAME=='FS-cell':
@@ -37,6 +57,8 @@ def get_neuron_params(NAME, name='', number=1, SI_units=False):
         print('cell parameters --NOT-- in SI units')
         
     return params.copy()
+
+
 
 if __name__=='__main__':
 
