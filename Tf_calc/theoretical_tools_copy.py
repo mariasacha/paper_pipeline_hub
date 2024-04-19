@@ -6,7 +6,8 @@ import sys
 from scipy.special import erf, erfc, erfcinv
 
 
-def MPF(fexc,finh,fout, params, cell_type):
+# Jorin's functions
+def MPF(fexc,finh,adapt, params, cell_type):
 
     p = params
     Qe,Qi,Te,Ti,Ee,Ei,Cm,Tw,Gl, gei, Ntot = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot']
@@ -34,7 +35,8 @@ def MPF(fexc,finh,fout, params, cell_type):
     muGi = Qi*Ti*fi
     muGe = Qe*Te*fe
     muG = Gl+muGe+muGi
-    muV = (muGe*Ee+muGi*Ei+Gl*El - fout*Tw*b + a*El)/(muG+a)
+    # muV = (muGe*Ee+muGi*Ei+Gl*El - fout*Tw*b + a*El)/(muG+a)
+    muV = (muGe*Ee+muGi*Ei+Gl*El - adapt)/(muG+a)
     
     muGn = muG/Gl
     Tm = Cm/muG
@@ -55,7 +57,33 @@ def pheV(fout, muV, sV, Tv):
     return np.sqrt(2)*sV * erfcinv( 2*Tv*fout ) + muV # Zerlaut 2017
     # return np.sqrt(2)*sV * erfcinv( Tv*fout ) + muV # to widen the definition range
 
+def TF(P, muV, sV, Tv, TvN):
+    # the transfer function
 
+    fout = 1/(2*Tv) * erfc( (Vthre(P, muV, sV, TvN) - muV)/(np.sqrt(2)*sV) )
+    
+    # fout = np.where(fout<0, 1e-9, fout)
+    fout[fout<0]=0
+    return fout
+
+
+def Vthre(P, muV, sV, TvN):
+    # calculating the effective threshold potential with a general second order polynomial of the membrane moments (mu,sigma,tau)
+    # normalizing moments:
+    muV0 = -60e-3;
+    DmuV0 = 10e-3;
+    sV0 = 4e-3;
+    DsV0 = 6e-3;
+    TvN0 = 0.5;
+    DTvN0 = 1.;
+    
+    # first order polynomial
+    Vo1 = P[0] + P[1]*(muV-muV0)/DmuV0 + P[2]*(sV-sV0)/DsV0 + P[3]*(TvN-TvN0)/DTvN0
+    # second order polynomial
+    # Vo2 = P[4]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0) + P[5]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0 + P[6]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0 + P[7]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0) + P[8]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0  + P[9]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0);
+    Vo2 = P[4]*((muV-muV0)/DmuV0)**2 + P[5]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0 + P[6]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0 + P[7]*((sV-sV0)/DsV0)**2 + P[8]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0  + P[9]*((TvN-TvN0)/DTvN0)**2;
+
+    return Vo1 + Vo2
 def get_rid_of_nans(vve, vvi, FF, params, cell_type):
     ve2 = vve.flatten()
     vi2 = vvi.flatten()
@@ -112,14 +140,6 @@ def get_rid_of_nans(vve, vvi, FF, params, cell_type):
     
     return muV_fit, sV_fit, Tv_fit, TvN_fit, Veff_fit
 
-def TF(P, muV, sV, Tv, TvN):
-    # the transfer function
-
-    fout = 1/(2*Tv) * erfc( (Vthre(P, muV, sV, TvN) - muV)/(np.sqrt(2)*sV) )
-    
-    # fout = np.where(fout<0, 1e-9, fout)
-    fout[fout<0]=0
-    return fout
 
 def pseq_params(params, cell_type):
     # Qe, Te, Ee = params['Qe'], params['Te'], params['Ee']

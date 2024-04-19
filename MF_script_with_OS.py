@@ -37,7 +37,9 @@ def TF(P,fexc,finh,adapt, El):
     DTvN0 = 1.;
 
     #Effective threshold
-    vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[5]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[6]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[7]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[8]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[9]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[10]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+    # vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[5]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[6]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[7]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[8]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[9]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[10]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+    
+    vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[4]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[5]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[6]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[7]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[8]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[9]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
 
     frout=.5/TvN*Gl/Cm*(1-erf((vthr-muV)/np.sqrt(2)/sV));
     
@@ -99,8 +101,11 @@ Ntot=10000; #total number of cells
 
 
 #Fitting coefficients
-PRS=np.load('RS-cell0_CONFIG1_fit.npy')
-PFS=np.load('FS-cell_CONFIG1_fit.npy')
+PRS=np.load('RS-cell0_CONFIG1_fit_2.npy')
+PFS=np.load('FS-cell_CONFIG1_fit_2.npy')
+
+PRS=np.load('./data/ExpTF_exc_50x50_trial_RS__fit.npy')
+PFS=np.load('./data/ExpTF_inh_50x50_trial_FS__fit.npy')
 
 #Time
 tfinal=TotTime
@@ -112,6 +117,8 @@ v_drive = Iext
 sigma=3.5
 os_noise = sigma*OU(tfinal) + v_drive
 
+print(max(os_noise), min(os_noise))
+
 #To adjust
 bRS = b_e*1e-12 #adaptation 
 Te=tau_e*1.e-3; #excitatory synaptic decay
@@ -122,8 +129,8 @@ Eli = -65*1e-3 #leak reversal (inh)
 T = 20*1e-3 # time constant
 
 #Initial Conditions
-fecont=8;
-ficont=10;
+fecont=20;
+ficont=5;
 w=fecont*bRS*twRS
 
 LSw=[]
