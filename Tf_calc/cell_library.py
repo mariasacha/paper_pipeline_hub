@@ -4,7 +4,7 @@ within this file
 """
 from __future__ import print_function
 
-def get_neuron_params_double_cell(NAME):
+def get_neuron_params_double_cell(NAME, SI_units=False):
     
     if NAME == 'FS-RS': 
         params = {#Cells
@@ -21,6 +21,24 @@ def get_neuron_params_double_cell(NAME):
         print('====================================================')
         print('------------ CELL NOT RECOGNIZED !! ---------------')
         print('====================================================')
+    
+    if SI_units:
+        print('cell parameters in SI units')
+        # mV to V
+        params['EL_e'], params['EL_i'], params['E_e'], params['E_i'] = 1e-3*params['EL_e'],1e-3*params['EL_i'],1e-3*params['E_e'],1e-3*params['E_i']
+        
+        params['V_th'], params['V_r'], params['V_m'], params['V_cut'] =\
+             1e-3*params['V_th'], 1e-3*params['V_r'], 1e-3*params['V_m'], 1e-3*params['V_cut']
+        
+        params['delta_e'], params['delta_i'] = 1e-3*params['delta_e'], 1e-3*params['delta_i']
+        # ms to s
+        params['tau_w'],params['tau_e'],params['tau_i'] = 1e-3*params['tau_w'], 1e-3*params['tau_e'],1e-3*params['tau_i']
+        # nS to S
+        params['a_e'], params['a_i'],params['Q_e'], params['Q_i'], params['Gl'] = 1e-9*params['a_e'],1e-9*params['a_i'],1e-9*params['Q_e'],1e-9*params['Q_i'], 1e-9*params['Gl']
+        # pF to F and pA to A
+        params['Cm'], params['b_e'],params['b_i'] = 1e-12*params['Cm'], 1e-12*params['b_e'],1e-12*params['b_i']
+    else:
+        print('cell parameters --NOT-- in SI units')
 
     return params.copy()
     
