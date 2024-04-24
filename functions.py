@@ -1528,6 +1528,7 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
     
     if load == 'tau_i': 
         colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
+        colorscale = 'jet'
         x_heat = tau_v
         title_fig ='τᵢ (ms)'
         if precalc: 
@@ -1538,8 +1539,8 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         else:
             x_trace=tauis  
             y_trace=bthr
-            x_ticks = int(len(x_trace))
-            y_ticks = int(len(y_trace))                
+            x_ticks = int(len(x_trace)/4)
+            y_ticks = int(len(y_trace)/4)                
     elif load=='tau_e':
         colorscale = 'hot'
         x_heat = tau_v
@@ -1559,7 +1560,7 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig.add_trace(go.Heatmap(
-            z=mean_array, zmin=mean_array.min(), zmax=1000,
+            z=mean_array, zmin=mean_array.min(), zmax=mean_array.max(),
         x = x_heat, y=bvals, 
             colorscale=colorscale, colorbar=dict(tickfont=dict(size=19), tickcolor='black')))
 
