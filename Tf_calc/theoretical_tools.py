@@ -33,7 +33,7 @@ def eff_thresh(mu_V, sig_V, tauN_V, params):
           P_sig_tau*((sig_V - sig_0) / sig_d)*((tauN_V - tau_0) / tau_d))
     return V0 + V1 + V2
 
-def mu_sig_tau_func(f_e, f_i, w_ad,params,cell_type):
+def mu_sig_tau_func(f_e, f_i, fout,params,cell_type):
     p = params
     Q_e,Q_i2,tau_e,tau_i,E_e,E_i,C_m,Tw,g_L, gei, ntot = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot']
 
@@ -50,7 +50,8 @@ def mu_sig_tau_func(f_e, f_i, w_ad,params,cell_type):
     mu_G = mu_Ge  + mu_Gi + g_L
     tau_eff = C_m / mu_G
     
-    mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
+    # mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
+    mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - fout*Tw*b + a*E_L) / mu_G
     
     U_e = Q_e / mu_G*(E_e - mu_V)
     U_i = Q_i2 / mu_G*(E_i - mu_V)
@@ -82,7 +83,8 @@ def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False):
     # FF2[FF2<1e-9] = 1e-9 
 
         # Calculate Veff:
-    muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type) 
+    # muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type) 
+    muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, FF2,params,cell_type) 
     Veff = eff_thresh_estimate(FF2,muV2, sV2, Tv2)
 
     #delete Nan/Infs
@@ -140,7 +142,8 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
     inp_exc = feSim
     vve, vvi = np.meshgrid(feSim, fiSim)
     
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
 
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
     ax.plot(inp_exc, out_rate, 'ro', label='data');
@@ -158,7 +161,8 @@ def video_check_fit(file, param_file, adapt_file ,cell_type, P):
     out_rate = np.load(file)
 
     vve, vvi = np.meshgrid(ve, vi)
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
 
     # Define the function to update the plot for each frame
@@ -355,7 +359,8 @@ def adjust_ranges(ve, vi, FF, adapt,params,cell_type, range_inh, range_exc):
         FF2 = FF.flatten()
         adapt2 = adapt[red].flatten()
 
-    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,params,cell_type)
 
     return mu_V, sig_V, tau_V, tauN_V, FF2
 ################################################################
@@ -399,7 +404,8 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     ve2, vi2, FF2, adapt2 = get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type)
 
     #calculate subthresh
-    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,params,cell_type)
     Veff_thresh = eff_thresh_estimate(FF2,mu_V, sig_V, tau_V)
 
     # fitting first order Vthr on the phenomenological threshold space
@@ -439,7 +445,8 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         P = fit2['x']
 
         #originals - calculate mean error
-        muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+        # muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+        muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, FF,params,cell_type)
         fit_rate = output_rate(P,muV, sigV, tauV, tauNV)
         mean_error = np.mean(np.sqrt((FF - fit_rate)**2)) 
 

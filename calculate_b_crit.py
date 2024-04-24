@@ -6,7 +6,6 @@ from scipy import optimize
 import os
 from IPython.display import clear_output
 
-
 """
 returns array of type [[tau_e_1, tau_i_1, b_crit_1], [tau_e_2, tau_i_2, b_crit_2], ..., [tau_e_n, tau_i_n, b_crit_n]]
 """

@@ -19,7 +19,7 @@ parser.add_argument('--time', type=float, default=1000, help='Total Time of simu
 args = parser.parse_args()
 
 
-MODEL = args.model
+# MODEL = args.model
 CELLS = args.cells
 
 # eqs = get_model(MODEL)
@@ -94,7 +94,7 @@ G_inh.b = b_i * pA
 G_inh.DeltaT = delta_i * mV
 G_inh.VT = V_th * mV
 # G_inh.Vcut = G_inh.VT + 5 * G_inh.DeltaT
-G_inh.Vcut = Vcut_i * mV
+G_inh.Vcut = V_cut * mV
 G_inh.EL = EL_i * mV
 
 # Population 2 - Regular Spiking
@@ -109,7 +109,7 @@ G_exc.TsynE =tau_e*ms
 G_exc.b=b_e*pA
 G_exc.DeltaT=delta_e*mV
 G_exc.VT=V_th*mV
-G_exc.Vcut = Vcut_e * mV
+G_exc.Vcut = V_cut * mV
 # G_exc.Vcut=G_exc.VT + 5 * G_exc.DeltaT
 G_exc.EL=EL_e*mV
 
