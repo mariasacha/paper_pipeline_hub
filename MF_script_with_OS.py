@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pylab as plt
 from math import erf
 import argparse
+from functions import *
+from Tf_calc.cell_library import get_neuron_params_double_cell
 
 
 def TF(P,fexc,finh,adapt, El):
@@ -68,44 +70,59 @@ def OU(tfin):
     return x
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
+
 parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
 parser.add_argument('--iext', type=float, default=0.3, help='external input - in Hz')
-
 parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
 parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
+parser.add_argument('--use_new', type=bool, default=False, help='use input parameters - if False: will use the ones in params file')
+
 parser.add_argument('--time', type=float, default=10, help='Total Time of simulation - in s')
+
+parser.add_argument('--file_fs',  default='FS-cell_CONFIG1_fit_2.npy', help='fit for fs')
+parser.add_argument('--file_rs',  default='RS-cell0_CONFIG1_fit_2.npy', help='fit for rs')
+
+parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
+
 args = parser.parse_args()
 
-b_e = args.b_e
+CELLS = args.cells
+params = get_neuron_params_double_cell(CELLS, SI_units = True)
+
+use_new = args.use_new
+
+if use_new:
+    params['b_e'] = args.b_e
+    params['tau_e'] = args.tau_e
+    params['tau_i'] = args.tau_e
+
+p = params
+
 Iext = args.iext
-tau_e = args.tau_e
-tau_i = args.tau_e
 TotTime = args.time
 
 #Model parameters
-Gl=10*1.e-9; #leak conductance
-Cm=200*1.e-12; #capacitance
+Gl=p['Gl']; #leak conductance
+Cm=p['Cm']; #capacitance
 
-Qe=1.5*1.e-9; #excitatory quantal conductance
-Qi=5.*1.e-9; #inhibitory quantal conductance
+Qe=p['Q_e']; #excitatory quantal conductance
+Qi=p['Q_i']; #inhibitory quantal conductance
 
-Ee=0; #excitatory reversal potential
-Ei=-80*1.e-3; #inhibitory reversal
+Ee=p['E_e']; #excitatory reversal potential
+Ei=p['E_i']; #inhibitory reversal
 
-twRS=.5; #adaptation time constant 
+twRS=p['tau_w']; #adaptation time constant 
 
 #Network parameters
-pconnec=0.05; #probability of connection
-gei=0.2; #percentage of inhibitory cells
-Ntot=10000; #total number of cells
+pconnec= p['p_con']; #probability of connection
+gei=p['gei']; #percentage of inhibitory cells
+Ntot=p['Ntot']; #total number of cells
 
 
 #Fitting coefficients
-PRS=np.load('RS-cell0_CONFIG1_fit_2.npy')
-PFS=np.load('FS-cell_CONFIG1_fit_2.npy')
-
-PRS=np.load('./data/ExpTF_exc_50x50_trial_RS__fit.npy')
-PFS=np.load('./data/ExpTF_inh_50x50_trial_FS__fit.npy')
+PRS=np.load(args.file_rs)
+PFS=np.load(args.file_fs)
 
 #Time
 tfinal=TotTime
@@ -117,20 +134,31 @@ v_drive = Iext
 sigma=3.5
 os_noise = sigma*OU(tfinal) + v_drive
 
+#Create the kick
+AmpStim = args.input #0
+time_peek = 200.
+TauP=20 #20
+
+plat = TotTime - time_peek - TauP #100
+test_input = []
+
+for ji in t:
+    test_input.append(0. + input_rate(ji, time_peek, TauP, 1, AmpStim, plat))
+
 print(max(os_noise), min(os_noise))
 
 #To adjust
-bRS = b_e*1e-12 #adaptation 
-Te=tau_e*1.e-3; #excitatory synaptic decay
-Ti=tau_i*1.e-3; #inhibitory synaptic decay
+bRS = p['b_e']; #adaptation 
+Te=p['tau_e']; #excitatory synaptic decay
+Ti=p['tau_i']; #inhibitory synaptic decay
 
-Ele =-64*1e-3 #leak reversal (exc)
-Eli = -65*1e-3 #leak reversal (inh)
+Ele =p['EL_e'] #leak reversal (exc)
+Eli = p['EL_i'] #leak reversal (inh)
 T = 20*1e-3 # time constant
 
 #Initial Conditions
-fecont=20;
-ficont=5;
+fecont=7;
+ficont=8;
 w=fecont*bRS*twRS
 
 LSw=[]
@@ -139,7 +167,12 @@ LSfi=[]
 
 print("starting")
 for i in range(len(t)):
-    external_input =os_noise[i]
+
+    if AmpStim>0:
+        # print("Input = ", AmpStim)
+        external_input = test_input[i]
+    else:
+        external_input =os_noise[i]
     fecontold=fecont
 
     FEX = fecont + external_input

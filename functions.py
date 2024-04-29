@@ -1524,11 +1524,21 @@ def load_survival( load = 'tau_e', precalc=False, save_path = './'):
             taus = [i for i in taus if i <= tau_v.max()]
     return mean_array,taus, bthr, tau_v, bvals
 
-def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , precalc =False, save_im=False):
+def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , precalc =False, save_im=False, **kwargs):
     
-    if load == 'tau_i': 
-        colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
-        colorscale = 'jet'
+    default_args = {'z_min': mean_array.min(), 'z_max': mean_array.max(), 'colorscale': None, 'line_color':'white'}
+
+    #update arguments
+    default_args.update(kwargs)
+
+    z_min, z_max, cscale, line_color =default_args['z_min'],default_args['z_max'], default_args['colorscale'], default_args['line_color']
+
+    if load == 'tau_i':
+        if not cscale: 
+            colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
+        else:
+            colorscale = cscale
+        # colorscale = 'jet'
         x_heat = tau_v
         title_fig ='τᵢ (ms)'
         if precalc: 
@@ -1539,28 +1549,40 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         else:
             x_trace=tauis  
             y_trace=bthr
+            dict_b_t = {b:t for b,t in zip(bthr, tauis)}
+            y_trace=[b for b in bthr if b<=np.max(bvals)]
+            x_trace=[dict_b_t[b] for b in y_trace]
             x_ticks = int(len(x_trace)/4)
             y_ticks = int(len(y_trace)/4)                
     elif load=='tau_e':
-        colorscale = 'hot'
+        if not cscale: 
+            colorscale = 'hot'
+        else:
+            colorscale = cscale
         x_heat = tau_v
         title_fig='τₑ (ms)'
+        dict_b_t = {b:t for b,t in zip(bthr, tauis)}
+        y_trace=[b for b in bthr if b<=np.max(bvals)]
+        x_trace=[dict_b_t[b] for b in y_trace]
         if precalc:
             x_trace = tauis[3:-15]
             y_trace = bthr[3:-15]
             x_ticks = 16
             y_ticks = 10
         else:
-            x_trace=tauis  
-            y_trace=bthr
-            x_ticks = int(len(x_trace))
-            y_ticks = int(len(y_trace)) 
+            # x_trace=tauis  
+            # y_trace=bthr
+            # dict_b_t = {b:t for b,t in zip(bthr, tauis)}
+            # y_trace=[b for b in bthr if b<=np.max(bvals)]
+            # x_trace=[dict_b_t[b] for b in y_trace]
+            x_ticks = int(len(x_trace)/4)
+            y_ticks = int(len(y_trace)/4) 
 
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     fig.add_trace(go.Heatmap(
-            z=mean_array, zmin=mean_array.min(), zmax=mean_array.max(),
+            z=mean_array, zmin=z_min, zmax=z_max,
         x = x_heat, y=bvals, 
             colorscale=colorscale, colorbar=dict(tickfont=dict(size=19), tickcolor='black')))
 
@@ -1568,7 +1590,40 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         mode='lines', 
         x=x_trace, 
         y=y_trace,
-        line=dict(color='white',width=2)), secondary_y=False,)
+        line=dict(color=line_color,width=2), showlegend=False), secondary_y=False,)
+
+    fig.add_trace(go.Scatter(
+        mode='markers',
+        x=[5],
+        y=[3],
+        marker=dict(
+            symbol='square',
+            size=7,
+            color='white',
+            line=dict(
+                color='red',
+                width=1.5
+            )
+        ),
+    showlegend=False
+    ))
+
+
+    fig.add_trace(go.Scatter(
+        mode='markers',
+        x=[3.5],
+        y=[3],
+        marker=dict(
+            symbol='square',
+            size=7,
+            color='black',
+            line=dict(
+                color='red',
+                width=1.5
+            )
+        ),
+    showlegend=False
+    ))
 
     matplotlib_figsize = (6, 3.5)
     inch_to_pixels = 80

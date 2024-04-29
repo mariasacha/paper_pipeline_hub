@@ -1,10 +1,12 @@
 import numpy as np
 # import scipy.special as sp_spec
 # import scipy.integrate as sp_int
-from scipy.optimize import minimize
+from scipy.optimize import minimize, fixed_point, fsolve
 # import sys
 from scipy.special import erfc, erfcinv
 from scipy.ndimage import maximum_filter
+from Tf_calc.cell_library import get_neuron_params_double_cell
+from math import erf
 
 from matplotlib.animation import FuncAnimation
 from IPython.display import HTML
@@ -33,7 +35,7 @@ def eff_thresh(mu_V, sig_V, tauN_V, params):
           P_sig_tau*((sig_V - sig_0) / sig_d)*((tauN_V - tau_0) / tau_d))
     return V0 + V1 + V2
 
-def mu_sig_tau_func(f_e, f_i, w_ad,params,cell_type):
+def mu_sig_tau_func(f_e, f_i, fout,params,cell_type):
     p = params
     Q_e,Q_i2,tau_e,tau_i,E_e,E_i,C_m,Tw,g_L, gei, ntot = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot']
 
@@ -50,7 +52,8 @@ def mu_sig_tau_func(f_e, f_i, w_ad,params,cell_type):
     mu_G = mu_Ge  + mu_Gi + g_L
     tau_eff = C_m / mu_G
     
-    mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
+    # mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
+    mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - fout*Tw*b + a*E_L) / mu_G
     
     U_e = Q_e / mu_G*(E_e - mu_V)
     U_i = Q_i2 / mu_G*(E_i - mu_V)
@@ -71,7 +74,6 @@ def output_rate(params,mu_V, sig_V, tau_V, tauN_V):
 def eff_thresh_estimate(ydata, mu_V, sig_V, tau_V):
     Veff_thresh = mu_V + np.sqrt(2)*sig_V*erfcinv(ydata*2*tau_V)
     return Veff_thresh
-
 ##### Maria's stuff #####
 def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False):
     ve2 = vve.flatten()
@@ -82,7 +84,8 @@ def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False):
     # FF2[FF2<1e-9] = 1e-9 
 
         # Calculate Veff:
-    muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type) 
+    # muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type) 
+    muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, FF2,params,cell_type) 
     Veff = eff_thresh_estimate(FF2,muV2, sV2, Tv2)
 
     #delete Nan/Infs
@@ -140,11 +143,13 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
     inp_exc = feSim
     vve, vvi = np.meshgrid(feSim, fiSim)
     
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
 
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
     ax.plot(inp_exc, out_rate, 'ro', label='data');
-    ax.plot(inp_exc, fit_rate, 'k.', label='fit');
+    ax.plot(inp_exc, fit_rate.T, 'k.', label='fit');
+    
 
     mean_error = np.nanmean(np.sqrt((out_rate - fit_rate)**2))
 
@@ -158,7 +163,8 @@ def video_check_fit(file, param_file, adapt_file ,cell_type, P):
     out_rate = np.load(file)
 
     vve, vvi = np.meshgrid(ve, vi)
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
 
     # Define the function to update the plot for each frame
@@ -233,6 +239,143 @@ def plot_example_adjust_range(file, param_file, adapt_file ,cell_type, P, **kwar
     plt.tight_layout()
 
     plt.show()
+
+def plot_curve(NAME = 'FS-RS', file_rs ='RS-cell0_CONFIG1_fit_2.npy', file_fs= 'FS-cell_CONFIG1_fit_2.npy', 
+               use_new=False, **kwargs):
+    
+    """
+    NAME : str, FS-RS
+    file_rs, file_fs : str, P coef for the two types of cells
+    use_new : if True you can use new parameters
+
+    kwargs : update parameters eg b_e, tau_e, etc
+    """
+    def TF_2(finh,fexc,fext,fextin,P,adapt,El):
+
+
+        fe = (fexc+fext)*(1.-gei)*pconnec*Ntot;
+        fi = (finh+fextin)*gei*pconnec*Ntot;
+
+        muGi = Qi*Ti*fi;
+        muGe = Qe*Te*fe;
+        muG = Gl+muGe+muGi;
+        muV = (muGe*Ee+muGi*Ei+Gl*El-adapt)/muG;
+
+        Tm = Cm/muG;
+
+        Ue =  Qe/muG*(Ee-muV);
+        Ui = Qi/muG*(Ei-muV);
+
+        sV = np.sqrt(fe*(Ue*Te)*(Ue*Te)/2./(Te+Tm)+fi*(Ui*Ti)*(Ui*Ti)/2./(Ti+Tm));
+
+
+        fe= fe+1e-9;
+        fi=fi+1e-9;
+        Tv = ( fe*(Ue*Te)*(Ue*Te) + fi*(Qi*Ui)*(Qi*Ui)) /( fe*(Ue*Te)*(Ue*Te)/(Te+Tm) + fi*(Qi*Ui)*(Qi*Ui)/(Ti+Tm) );
+        TvN = Tv*Gl/Cm;
+
+        muV0=-60e-3;
+        DmuV0 = 10e-3;
+        sV0 =4e-3;
+        DsV0= 6e-3;
+        TvN0=0.5;
+        DTvN0 = 1.;
+
+        #Effective threshold
+        vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[4]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[5]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[6]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[7]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[8]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[9]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+
+        frout=.5/TvN*Gl/Cm*(1-erf((vthr-muV)/np.sqrt(2)/sV));
+
+        return frout;
+    
+    #Fitting coefficients
+    PRS=np.load(file_rs)
+    PFS=np.load(file_fs)
+
+    print(PRS)
+    T = 20*1e-3 # time constant
+
+    #Initial Conditions
+    fecont=2;
+    ficont=10;
+
+    LSfe=[]
+    nuev=np.arange(0.00000001,10,step=0.1)
+
+    nuext = 0 
+    nuextin = 0.
+
+
+    params = get_neuron_params_double_cell(NAME, SI_units=True)
+    
+    if use_new:
+        for key, it in kwargs.items():
+            params[key] = it
+
+    p = params
+
+    #Model parameters
+    Gl=p['Gl']; #leak conductance
+    Cm=p['Cm']; #capacitance
+
+    Qe=p['Q_e']; #excitatory quantal conductance
+    Qi=p['Q_i']; #inhibitory quantal conductance
+
+    Ee=p['E_e']; #excitatory reversal potential
+    Ei=p['E_i']; #inhibitory reversal
+
+    twRS=p['tau_w']; #adaptation time constant 
+
+    #Network parameters
+    pconnec= p['p_con']; #probability of connection
+    gei=p['gei']; #percentage of inhibitory cells
+    Ntot=p['Ntot']; #total number of cells
+
+    #To adjust
+    bRS = p['b_e']; #adaptation 
+    Te=p['tau_e']; #excitatory synaptic decay
+    Ti=p['tau_i']; #inhibitory synaptic decay
+
+    Ele =p['EL_e'] #leak reversal (exc)
+    Eli = p['EL_i'] #leak reversal (inh)
+    
+    # params = get_neuron_params_double_cell(NAME, SI_units=False)
+
+    # p = params
+    # Qe,Qi,Te,Ti,Ee,Ei,Cm,twRS,Gl, gei, Ntot, pconnec = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot'], p['p_con']
+
+    # a,bRS,Ele = p['a_e']*1e-9, p['b_e']*1e-12, p['EL_e']*1e-3
+
+    # a,bFS,Eli = p['a_i']*1e-9, p['b_i']*1e-12, p['EL_i']*1e-3
+
+    # print("running: ", sim_name)
+    for nue in nuev:
+
+        w=nue*bRS*twRS
+        try:
+            nui_fix = fixed_point(TF_2, [1.0], args=(nue, nuext, nuextin, PFS, 0., Eli))
+        except RuntimeError:
+            print(f"runtime error: b_e = {bRS}, tau_e={Te}, tau_i={Ti}")
+        TFe_fix = TF_2(nui_fix, nue, nuext, 0., PRS, w, Ele)
+        LSfe.append(float(TFe_fix))
+
+    plt.plot(nuev, LSfe, "b-", label=f"b={bRS*1.e+12}")
+    plt.plot(nuev, nuev, "k--")
+    plt.legend()
+    plt.show() 
+
+    # Define a function that returns TF_2(nue) - nue
+    def func(nue):
+        w = nue * bRS * twRS
+        nui_fix = fixed_point(TF_2, [1.0], args=(nue, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=1500)
+        TFe_fix = TF_2(nui_fix, nue, nuext, nuextin, PRS, w, Ele)
+        return TFe_fix - nue
+
+
+    # Use fsolve to find the roots of the difference equation
+    initial_guess = 4  # Initial guess for the root
+    intersection_point = fsolve(func, initial_guess)
+    print("solution = ", intersection_point)
 
 def convert_params(params):
     print('cell parameters in SI units')
@@ -355,7 +498,8 @@ def adjust_ranges(ve, vi, FF, adapt,params,cell_type, range_inh, range_exc):
         FF2 = FF.flatten()
         adapt2 = adapt[red].flatten()
 
-    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,params,cell_type)
 
     return mu_V, sig_V, tau_V, tauN_V, FF2
 ################################################################
@@ -390,7 +534,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     vthr_tol,vtrh_maxiter,vthr_method = default_args['vthr_tol'],default_args['vtrh_maxiter'],default_args['vthr_method']
     tf_tol, tf_maxiter, tf_method = default_args['tf_tol'],default_args['tf_maxiter'],default_args['tf_method']
     
-    FF=np.load(DATA) #has shape ve*vi
+    FF=np.load(DATA).T #has shape ve*vi
     adapt = np.load(adapt_file)
     ve, vi, params = np.load(params_file,allow_pickle=True) 
     vve, vvi = np.meshgrid(ve, vi)
@@ -399,7 +543,8 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     ve2, vi2, FF2, adapt2 = get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type)
 
     #calculate subthresh
-    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
+    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,params,cell_type)
     Veff_thresh = eff_thresh_estimate(FF2,mu_V, sig_V, tau_V)
 
     # fitting first order Vthr on the phenomenological threshold space
@@ -439,7 +584,8 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         P = fit2['x']
 
         #originals - calculate mean error
-        muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+        # muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+        muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, FF,params,cell_type)
         fit_rate = output_rate(P,muV, sigV, tauV, tauNV)
         mean_error = np.mean(np.sqrt((FF - fit_rate)**2)) 
 

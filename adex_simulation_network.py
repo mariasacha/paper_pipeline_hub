@@ -8,22 +8,35 @@ from Tf_calc.cell_library import get_neuron_params_double_cell
 start_scope()
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--b_e', type=float, default=0.0, help='adaptation (pA)')
-parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
-# parser.add_argument('--model', type=str, default='adex', help='model to run')
 parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
 
+parser.add_argument('--b_e', type=float, default=0.0, help='adaptation (pA)')
 parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay (ms)')
 parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay (ms)')
+parser.add_argument('--use_new', type=bool, default=False, help='use input parameters - if False: will use the ones in params file')
+
+parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
+parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
+# parser.add_argument('--model', type=str, default='adex', help='model to run')
+
 parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
+parser.add_argument('--save_path', default=None, help='save path ')
 args = parser.parse_args()
 
 
-MODEL = args.model
+# MODEL = args.model
 CELLS = args.cells
 
 # eqs = get_model(MODEL)
 params = get_neuron_params_double_cell(CELLS)
+
+use_new = args.use_new
+
+if use_new:
+    params['b_e'] = args.b_e
+    params['tau_e'] = args.tau_e
+    params['tau_i'] = args.tau_e
+    
 
 # Extract values from params for each key
 extracted_values = {}
@@ -32,11 +45,10 @@ for key in params.keys():
 # Unpack extracted values into variables
 locals().update(extracted_values)
 
-b_e = args.b_e
-Iext = args.iext
-tau_e = args.tau_e
-tau_i = args.tau_e
+save_path = args.save_path
+
 TotTime = args.time
+Iext = args.iext
 
 N1 = int(gei*Ntot)
 N2 = int((1-gei)*Ntot)
@@ -44,6 +56,19 @@ N2 = int((1-gei)*Ntot)
 DT=0.1 # time step
 # N1 = 2000 # number of inhibitory neurons
 # N2 = 8000 # number of excitatory neurons 
+
+#Create the kick
+AmpStim = args.input #0
+time_peek = 200.
+TauP=20 #20
+
+plat = TotTime - time_peek - TauP #100
+t2 = np.arange(0, TotTime, DT)
+test_input = []
+
+for ji in t2:
+    test_input.append(0. + input_rate(ji, time_peek, TauP, 1, AmpStim, plat))
+Input_Stim = TimedArray(test_input * Hz, dt=DT * ms)
 
 duration = TotTime*ms
 
@@ -94,7 +119,7 @@ G_inh.b = b_i * pA
 G_inh.DeltaT = delta_i * mV
 G_inh.VT = V_th * mV
 # G_inh.Vcut = G_inh.VT + 5 * G_inh.DeltaT
-G_inh.Vcut = Vcut_i * mV
+G_inh.Vcut = V_cut * mV
 G_inh.EL = EL_i * mV
 
 # Population 2 - Regular Spiking
@@ -109,13 +134,16 @@ G_exc.TsynE =tau_e*ms
 G_exc.b=b_e*pA
 G_exc.DeltaT=delta_e*mV
 G_exc.VT=V_th*mV
-G_exc.Vcut = Vcut_e * mV
+G_exc.Vcut = V_cut * mV
 # G_exc.Vcut=G_exc.VT + 5 * G_exc.DeltaT
 G_exc.EL=EL_e*mV
 
 # external drive--------------------------------------------------------------------------
-
-P_ed=PoissonGroup(N2, rates=Iext*Hz)
+if AmpStim > 0:
+    print("Input =", AmpStim)
+    P_ed=PoissonGroup(N2, rates='Input_Stim(t)')
+else:
+    P_ed=PoissonGroup(N2, rates=Iext*Hz)
 
 # Network-----------------------------------------------------------------------------
 
@@ -172,6 +200,14 @@ RasG_inh = array([M1G_inh.t/ms, [i+N2 for i in M1G_inh.i]])
 RasG_exc = array([M1G_exc.t/ms, M1G_exc.i])
 TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon)
 
+if save_path:
+    try:
+        os.listdir(save_path)
+    except:
+        os.makedirs(save_path)
+    
+    np.save(save_path + f'mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), params], dtype=object))
+    np.save(save_path + f'mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), params], dtype=object))
 
 # # ----- Raster plot + mean adaptation ------
 # fig, axes = figure.add_subplots(2,1,figsize=(8,12))
