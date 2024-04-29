@@ -5,6 +5,5 @@
 "parameter_coupling" : {"type": "Linear", "parameter": {"a": 0.3, "b": 0.0}},
 "parameter_integrator" : {"type": "Heun", "stochastic": true, "noise_type": "Additive", "noise_parameter": {"nsig": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], "ntau": 0.0, "dt": 0.1}, "dt": 0.1},
 "parameter_monitor" : {"Raw": true, "TemporalAverage": false, "parameter_TemporalAverage": {"variables_of_interest": [0, 1, 2, 3, 4, 5, 6, 7], "period": 1.0}, "Bold": false, "parameter_Bold": {"variables_of_interest": [0], "period": 200.0}, "Ca": false, "parameter_Ca": {"variables_of_interest": [0, 1, 2], "tau_rise": 0.01, "tau_decay": 0.1}},
-"parameter_stimulation" : {"onset": 1100.0, "tau": 50, "T": 1000000000.0, "weights": [0.0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "variables": [0]},
 "myseed":10
 }
