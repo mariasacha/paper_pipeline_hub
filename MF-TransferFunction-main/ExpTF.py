@@ -12,16 +12,6 @@ N_ped = 8000 # external pop
 TotTime=1000 #Simulation duration (ms)
 duration = TotTime*ms
 
-#Parameters of network
-C = 200*pF
-gL = 10*nS
-tauw = 500*ms
-a =0.0*nS# 4*nS
-I = 0.*nA
-Ee=0*mV
-Ei=-80*mV
-eli=-65
-ele=-64
 
 FRout_inh=[]
 FRout_exc=[]
@@ -33,94 +23,70 @@ for rate_exc in linspace(0, 40, Npts):
 	FRout_exc.append([])
 	for rate_inh in linspace(0, 170, Npts):
 		
-		eqs = """
-		dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
-		dw/dt=(a*(vm-EL)-w)/tauw : amp
-		dGsynI/dt = -GsynI/TsynI : siemens
-		dGsynE/dt = -GsynE/TsynE : siemens
-		TsynI:second
-		TsynE:second
-		Vr:volt
-		b:amp
-		DeltaT:volt
-		Vcut:volt
-		VT:volt
-		EL:volt
-		"""
+		eqs='''
+		dv/dt = (-GsynE*(v-Ee)-GsynI*(v-Ei)-gl*(v-El)+ gl*Dt*exp((v-Vt)/Dt)-w + Is)/Cm : volt (unless refractory)
+		dw/dt = (a*(v-El)-w)/tau_w:ampere
+		dGsynI/dt = -GsynI/Tsyn : siemens
+		dGsynE/dt = -GsynE/Tsyn : siemens
+		Is:ampere
+		Cm:farad
+		gl:siemens
+		El:volt
+		a:siemens
+		tau_w:second
+		Dt:volt
+		Vt:volt
+		Ee:volt
+		Ei:volt
+		Tsyn:second
+		'''
 
 		# Population 1 [inhibitory] - RE - Reticular
 
-		# b_inh = 10.*pA
-		# G_inh = NeuronGroup(500, eqs, threshold='v > -20*mV', reset='v = -55*mV; w += b_inh', refractory='5*ms', method='heun')
-		# # init:
-		# G_inh.v = -55.*mV
-		# G_inh.w = 0.*pA
-		# # synaptic parameters
-		# G_inh.GsynI = 0.0*nS
-		# G_inh.GsynE = 0.0*nS
-		# G_inh.Ee = 0.*mV
-		# G_inh.Ei = -80.*mV
-		# G_inh.Tsyn = 5.*ms
-		# # cell parameters
-		# G_inh.Cm = 200.*pF
-		# G_inh.gl = 10.*nS
-		# G_inh.Vt = -45.*mV
-		# G_inh.Dt = 2.5*mV
-		# G_inh.tau_w = 200.*ms
-		# G_inh.Is = 0.0*nA # external input
-		# G_inh.El = -75.*mV
-		# G_inh.a = 8.0*nS
+		b_inh = 10.*pA
+		G_inh = NeuronGroup(500, eqs, threshold='v > -20*mV', reset='v = -55*mV; w += b_inh', refractory='5*ms', method='heun')
+		# init:
+		G_inh.v = -55.*mV
+		G_inh.w = 0.*pA
+		# synaptic parameters
+		G_inh.GsynI = 0.0*nS
+		G_inh.GsynE = 0.0*nS
+		G_inh.Ee = 0.*mV
+		G_inh.Ei = -80.*mV
+		G_inh.Tsyn = 5.*ms
+		# cell parameters
+		G_inh.Cm = 200.*pF
+		G_inh.gl = 10.*nS
+		G_inh.Vt = -45.*mV
+		G_inh.Dt = 2.5*mV
+		G_inh.tau_w = 200.*ms
+		G_inh.Is = 0.0*nA # external input
+		G_inh.El = -75.*mV
+		G_inh.a = 8.0*nS
 
-		G_inh = NeuronGroup(N_inh, model=eqs, threshold='vm > Vcut',refractory=5*ms,
-						reset="vm = Vr; w += b", method='heun')
-		G_inh.vm = -60*mV#EL
-		G_inh.w = a * (G_inh.vm - G_inh.EL)
-		G_inh.Vr = -65*mV #
-		G_inh.TsynI =tau_I*ms#5.0*ms
-		G_inh.TsynE =tau_E*ms#5.0*ms
-		G_inh.b=0*pA
-		G_inh.DeltaT=0.5*mV
-		G_inh.VT=-50.*mV
-		G_inh.Vcut=G_inh.VT + 5 * G_inh.DeltaT
-		G_inh.EL=eli*mV#-65*mV#-67*mV
 
-		# # Population 2 [excitatory] - TC - Thalamocortical
+		# Population 2 [excitatory] - TC - Thalamocortical
 
-		# b_exc = 10*pA
-		# G_exc = NeuronGroup(500, eqs, threshold='v > -20.0*mV', reset='v = -50*mV; w += b_exc', refractory='5*ms',  method='heun')
-		# # init
-		# G_exc.v = -50.*mV
-		# G_exc.w = 0.*pA
-		# # synaptic parameters
-		# G_exc.GsynI = 0.0*nS
-		# G_exc.GsynE = 0.0*nS
-		# G_exc.Ee = 0.*mV
-		# G_exc.Ei = -80.*mV
-		# G_exc.Tsyn = 5.*ms
-		# # cell parameters
-		# G_exc.Cm = 160.*pF
-		# G_exc.gl = 10.*nS
-		# G_exc.Vt = -50.*mV
-		# G_exc.Dt = 4.5*mV
-		# G_exc.tau_w = 200.*ms
-		# G_exc.Is = 0.0*nA # ext inp
-		# G_exc.El = -65.*mV # -55
-		# G_exc.a = 0.*nS
-
-			# Population 2 - Regular Spiking
-
-		G_exc = NeuronGroup(N_exc, model=eqs, threshold='vm > Vcut',refractory=5*ms,
-						reset="vm = Vr; w += b", method='heun')
-		G_exc.vm = -60*mV#EL
-		G_exc.w = a * (G_exc.vm - G_exc.EL)
-		G_exc.Vr = -65*mV
-		G_exc.TsynI =tau_I*ms#5.0*ms
-		G_exc.TsynE =tau_E*ms#5.0*ms
-		G_exc.b=b_ad*pA#0*pA#60*pA
-		G_exc.DeltaT=2*mV
-		G_exc.VT=-50.*mV
-		G_exc.Vcut=G_exc.VT + 5 * G_exc.DeltaT
-		G_exc.EL=ele*mV#-65*mV#-63*mV
+		b_exc = 10*pA
+		G_exc = NeuronGroup(500, eqs, threshold='v > -20.0*mV', reset='v = -50*mV; w += b_exc', refractory='5*ms',  method='heun')
+		# init
+		G_exc.v = -50.*mV
+		G_exc.w = 0.*pA
+		# synaptic parameters
+		G_exc.GsynI = 0.0*nS
+		G_exc.GsynE = 0.0*nS
+		G_exc.Ee = 0.*mV
+		G_exc.Ei = -80.*mV
+		G_exc.Tsyn = 5.*ms
+		# cell parameters
+		G_exc.Cm = 160.*pF
+		G_exc.gl = 10.*nS
+		G_exc.Vt = -50.*mV
+		G_exc.Dt = 4.5*mV
+		G_exc.tau_w = 200.*ms
+		G_exc.Is = 0.0*nA # ext inp
+		G_exc.El = -65.*mV # -55
+		G_exc.a = 0.*nS
 
 
 		# external drive--------------------------------------------------------------------------
@@ -139,8 +105,6 @@ for rate_exc in linspace(0, 40, Npts):
 		Qii = 1*nS
 		Qie = 6*nS
 
-		Qi=5.0*nS
-		Qe=1.5*nS
 		# probability of connection
 		prbC= 0.05
 

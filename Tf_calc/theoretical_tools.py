@@ -35,20 +35,23 @@ def eff_thresh(mu_V, sig_V, tauN_V, params):
           P_sig_tau*((sig_V - sig_0) / sig_d)*((tauN_V - tau_0) / tau_d))
     return V0 + V1 + V2
 
-def mu_sig_tau_func(f_e, f_i, fout,params,cell_type):
+def mu_sig_tau_func(fexc, finh, fout,params,cell_type):
     p = params
-    Q_e,Q_i2,tau_e,tau_i,E_e,E_i,C_m,Tw,g_L, gei, ntot = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot']
+    Q_e,Q_i,tau_e,tau_i,E_e,E_i,C_m,Tw,g_L, gei, ntot, pconnec = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot'], p['p_con']
 
     if cell_type == "RS":
         a,b,E_L = p['a_e']*1e-9, p['b_e']*1e-12, p['EL_e']*1e-3
     elif cell_type == "FS":
         a,b,E_L = p['a_i']*1e-9, p['b_i']*1e-12, p['EL_i']*1e-3
 
-    K_e = (1-gei)*ntot
-    K_i = gei*ntot
+    f_e = fexc*(1.-gei)*pconnec*ntot;
+    f_i = finh*gei*pconnec*ntot;
+    
+    # K_e = (1-gei)*ntot
+    # K_i = gei*ntot
 
-    mu_Ge = f_e*K_e*tau_e*Q_e
-    mu_Gi = f_i*K_i*tau_i*Q_i2
+    mu_Ge = f_e*tau_e*Q_e
+    mu_Gi = f_i*tau_i*Q_i
     mu_G = mu_Ge  + mu_Gi + g_L
     tau_eff = C_m / mu_G
     
@@ -56,12 +59,12 @@ def mu_sig_tau_func(f_e, f_i, fout,params,cell_type):
     mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - fout*Tw*b + a*E_L) / mu_G
     
     U_e = Q_e / mu_G*(E_e - mu_V)
-    U_i = Q_i2 / mu_G*(E_i - mu_V)
+    U_i = Q_i / mu_G*(E_i - mu_V)
     
-    sig_V = np.sqrt(K_e*f_e*(U_e*tau_e)**2 / (2*(tau_eff + tau_e)) + K_i*f_i*(U_i*tau_i)**2 / (2*(tau_eff + tau_i)))
+    sig_V = np.sqrt(f_e*(U_e*tau_e)*(U_e*tau_e) / (2*(tau_eff + tau_e)) + f_i*(U_i*tau_i)*(U_i*tau_i) / (2*(tau_eff + tau_i)))
     
-    tau_V = ((K_e*f_e*(U_e*tau_e)**2 + K_i*f_i*(U_i*tau_i)**2) / 
-        (K_e*f_e*(U_e*tau_e)**2 / (tau_eff + tau_e)  + K_i*f_i*(U_i*tau_i)**2 / (tau_eff + tau_i)))
+    tau_V = ((f_e*(U_e*tau_e)*(U_e*tau_e) + f_i*(U_i*tau_i)*(U_i*tau_i)) / 
+        (f_e*(U_e*tau_e)*(U_e*tau_e) / (tau_eff + tau_e)  + f_i*(U_i*tau_i)*(U_i*tau_i) / (tau_eff + tau_i)))
     
     tauN_V = tau_V*g_L / C_m
 
@@ -141,7 +144,7 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
     ax.set_xlabel('Excitatory input (Hz)')
         
     inp_exc = feSim
-    vve, vvi = np.meshgrid(feSim, fiSim)
+    vve, vvi = np.meshgrid(feSim, fiSim) #vve has the range_exc along the row, vvi has it accros the column 
     
     # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
     mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
@@ -159,8 +162,8 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
 def video_check_fit(file, param_file, adapt_file ,cell_type, P):
     
     ve, vi, params = np.load(param_file,allow_pickle=True)
-    adapt = np.load(adapt_file) 
-    out_rate = np.load(file)
+    adapt = np.load(adapt_file)
+    out_rate = np.load(file).T
 
     vve, vvi = np.meshgrid(ve, vi)
     # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
@@ -172,8 +175,8 @@ def video_check_fit(file, param_file, adapt_file ,cell_type, P):
         ax_anim.clear()
         i = frame  # iterate over different values of i
         ax_anim.set_title(f'vi = {vi[i]:.2f}Hz')
-        ax_anim.plot(ve, out_rate.T[i], 'o', ms=3, label='data')
-        ax_anim.plot(ve, fit_rate.T[i], label='fit')
+        ax_anim.plot(ve, out_rate[i], 'o', ms=3, label='data')
+        ax_anim.plot(ve, fit_rate[i], label='fit')
         ax_anim.set_xlabel('ve [Hz]')
         ax_anim.set_ylabel('vout [Hz]')
         plt.legend()
@@ -534,7 +537,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     vthr_tol,vtrh_maxiter,vthr_method = default_args['vthr_tol'],default_args['vtrh_maxiter'],default_args['vthr_method']
     tf_tol, tf_maxiter, tf_method = default_args['tf_tol'],default_args['tf_maxiter'],default_args['tf_method']
     
-    FF=np.load(DATA).T #has shape ve*vi
+    FF=np.load(DATA).T #has shape ve*vi bur with the transpose you put the ve to change accross the row, and the vi across the column 
     adapt = np.load(adapt_file)
     ve, vi, params = np.load(params_file,allow_pickle=True) 
     vve, vvi = np.meshgrid(ve, vi)

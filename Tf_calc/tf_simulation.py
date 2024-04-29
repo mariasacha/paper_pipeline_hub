@@ -50,7 +50,6 @@ duration = TotTime*ms
 # I = 0.*nA
 # Ee=E_e*mV
 # Ei=E_i*mV
-
 i=0
 eqs="""
 dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+Is-w)/Cm :volt (unless refractory)
