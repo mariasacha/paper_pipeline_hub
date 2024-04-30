@@ -35,15 +35,20 @@ def eff_thresh(mu_V, sig_V, tauN_V, params):
           P_sig_tau*((sig_V - sig_0) / sig_d)*((tauN_V - tau_0) / tau_d))
     return V0 + V1 + V2
 
-def mu_sig_tau_func(fexc, finh, fout,params,cell_type):
+def mu_sig_tau_func(fexc, finh, fout,w_ad,params,cell_type, w_prec=False):
     p = params
     Q_e,Q_i,tau_e,tau_i,E_e,E_i,C_m,Tw,g_L, gei, ntot, pconnec = p['Q_e']*1e-9,p['Q_i']*1e-9,p['tau_e']*1e-3,p['tau_i']*1e-3,p['E_e']*1e-3,p['E_i']*1e-3, p['Cm']*1e-12, p['tau_w']*1e-3,p['Gl']*1e-9, p['gei'], p['Ntot'], p['p_con']
 
     if cell_type == "RS":
-        a,b,E_L = p['a_e']*1e-9, p['b_e']*1e-12, p['EL_e']*1e-3
+        try:
+            a,b,E_L = p['a_e']*1e-9, p['b_e']*1e-12, p['EL_e']*1e-3
+        except KeyError:
+            a,b,E_L = p['a']*1e-9, p['b']*1e-12, p['EL']*1e-3
     elif cell_type == "FS":
-        a,b,E_L = p['a_i']*1e-9, p['b_i']*1e-12, p['EL_i']*1e-3
-
+        try:
+            a,b,E_L = p['a_i']*1e-9, p['b_i']*1e-12, p['EL_i']*1e-3
+        except KeyError:
+            a,b,E_L = p['a']*1e-9, p['b']*1e-12, p['EL']*1e-3
     f_e = fexc*(1.-gei)*pconnec*ntot;
     f_i = finh*gei*pconnec*ntot;
     
@@ -55,8 +60,10 @@ def mu_sig_tau_func(fexc, finh, fout,params,cell_type):
     mu_G = mu_Ge  + mu_Gi + g_L
     tau_eff = C_m / mu_G
     
-    # mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
-    mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - fout*Tw*b + a*E_L) / mu_G
+    if w_prec:
+        mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
+    else:
+        mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - fout*Tw*b + a*E_L) / mu_G
     
     U_e = Q_e / mu_G*(E_e - mu_V)
     U_i = Q_i / mu_G*(E_i - mu_V)
@@ -78,7 +85,10 @@ def eff_thresh_estimate(ydata, mu_V, sig_V, tau_V):
     Veff_thresh = mu_V + np.sqrt(2)*sig_V*erfcinv(ydata*2*tau_V)
     return Veff_thresh
 ##### Maria's stuff #####
-def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False):
+def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False, w_prec=False):
+    """
+    w_prec : if True use precalculated adaptation from network (adapt) instead of Tw*b*fout
+    """
     ve2 = vve.flatten()
     vi2 = vvi.flatten()
     FF2 = FF.flatten()
@@ -88,7 +98,7 @@ def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False):
 
         # Calculate Veff:
     # muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type) 
-    muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, FF2,params,cell_type) 
+    muV2, sV2, Tv2, TNv2= mu_sig_tau_func(ve2, vi2, FF2,adapt2,params,cell_type, w_prec=w_prec) 
     Veff = eff_thresh_estimate(FF2,muV2, sV2, Tv2)
 
     #delete Nan/Infs
@@ -108,8 +118,8 @@ def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False):
     else:
         return ve2, vi2, FF2, adapt2
 
-def plot_muv(vve, vvi, adapt):
-    mu_V, sig_V, tau_V, tauN_V =  mu_sig_tau_func(vve, vvi, adapt)
+def plot_muv(vve, vvi, FF, adapt,params,cell_type, w_prec=False):
+    mu_V, sig_V, tau_V, tauN_V =  mu_sig_tau_func(vve, vvi, FF, adapt,params,cell_type, w_prec=w_prec)
     # muV_2 = muV.reshape(50,50)
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -120,8 +130,8 @@ def plot_muv(vve, vvi, adapt):
     plt.ylabel('muV [mV]')
     plt.show()
 
-def plot_veff(vve, vvi, adapt, FF):
-    mu_V, sig_V, tau_V, tauN_V =  mu_sig_tau_func(vve, vvi, adapt)
+def plot_veff(vve, vvi, adapt, FF,params,cell_type, w_prec=False):
+    mu_V, sig_V, tau_V, tauN_V =  mu_sig_tau_func(vve, vvi, FF, adapt,params,cell_type, w_prec=w_prec)
     Veff = eff_thresh_estimate(FF, mu_V, sig_V, tau_V)
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -132,11 +142,11 @@ def plot_veff(vve, vvi, adapt, FF):
     ax.set_ylabel('Veff [mV]')
     plt.show()
 
-def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
+def plot_check_fit(file, param_file, adapt_file ,cell_type, P, w_prec=False):
     
     feSim, fiSim, params = np.load(param_file,allow_pickle=True) 
-    adapt = np.load(adapt_file)
-    out_rate = np.load(file)
+    adapt = np.load(adapt_file).T
+    out_rate = np.load(file).T
 
     fig, ax = plt.subplots(figsize=(10,5))
     ax.set_title(f'Transfer function of {cell_type} cell')
@@ -147,11 +157,13 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
     vve, vvi = np.meshgrid(feSim, fiSim) #vve has the range_exc along the row, vvi has it accros the column 
     
     # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,adapt, params,cell_type,w_prec=w_prec )
 
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
-    ax.plot(inp_exc, out_rate, 'ro', label='data');
+    ax.plot(inp_exc, out_rate.T, 'ro', label='data');
+
     ax.plot(inp_exc, fit_rate.T, 'k.', label='fit');
+
     
 
     mean_error = np.nanmean(np.sqrt((out_rate - fit_rate)**2))
@@ -159,15 +171,15 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P):
     ax.text(0.5, 0.95, f'dev: {mean_error:.2f} Hz', transform=ax.transAxes, ha='center')
     plt.show()
 
-def video_check_fit(file, param_file, adapt_file ,cell_type, P):
+def video_check_fit(file, param_file, adapt_file ,cell_type, P, w_prec=False):
     
     ve, vi, params = np.load(param_file,allow_pickle=True)
-    adapt = np.load(adapt_file)
+    adapt = np.load(adapt_file).T
     out_rate = np.load(file).T
 
     vve, vvi = np.meshgrid(ve, vi)
     # mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, out_rate,adapt, params,cell_type,w_prec=w_prec)
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
 
     # Define the function to update the plot for each frame
@@ -190,7 +202,7 @@ def video_check_fit(file, param_file, adapt_file ,cell_type, P):
     ani = FuncAnimation(fig_anim, update, frames=len(vi), interval=200,repeat=True)
     return HTML(ani.to_html5_video())
 
-def plot_example_adjust_range(file, param_file, adapt_file ,cell_type, P, **kwargs): 
+def plot_example_adjust_range(file, param_file, adapt_file ,cell_type, P,w_prec=False, **kwargs): 
 
     default_args = {'window': 12, 'thresh_pc': 0.9}
 
@@ -200,11 +212,11 @@ def plot_example_adjust_range(file, param_file, adapt_file ,cell_type, P, **kwar
     window, thresh_pc=default_args['window'],default_args['thresh_pc']
 
     ve, vi, params = np.load(param_file,allow_pickle=True)
-    adapt = np.load(adapt_file) 
-    out_rate = np.load(file)
+    adapt = np.load(adapt_file).T 
+    out_rate = np.load(file).T
 
     vve, vvi = np.meshgrid(ve, vi)
-    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
+    mu_V, sig_V, tau_V,tauN_V = mu_sig_tau_func(vve, vvi,out_rate, adapt,params,cell_type,w_prec=w_prec)
     fit_rate = output_rate(P,mu_V, sig_V, tau_V, tauN_V)
     error = np.sqrt((out_rate - fit_rate)**2).T
 
@@ -372,13 +384,19 @@ def plot_curve(NAME = 'FS-RS', file_rs ='RS-cell0_CONFIG1_fit_2.npy', file_fs= '
         w = nue * bRS * twRS
         nui_fix = fixed_point(TF_2, [1.0], args=(nue, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=1500)
         TFe_fix = TF_2(nui_fix, nue, nuext, nuextin, PRS, w, Ele)
+        # print("TFe_fix:", TFe_fix)
+        # print("nui_fix:", nui_fix)
         return TFe_fix - nue
 
 
     # Use fsolve to find the roots of the difference equation
-    initial_guess = 4  # Initial guess for the root
+    initial_guess = 6  # Initial guess for the root
     intersection_point = fsolve(func, initial_guess)
     print("solution = ", intersection_point)
+
+    nui_fix = fixed_point(TF_2, [intersection_point], args=(intersection_point, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=1500)
+
+    print("solution nui_fix = ",nui_fix)
 
 def convert_params(params):
     print('cell parameters in SI units')
@@ -462,7 +480,7 @@ def find_max_error(out_rate, fit_rate, ve, vi, window=12, thresh_pc = 0.9):
     
     return range_exc, range_inh
 
-def adjust_ranges(ve, vi, FF, adapt,params,cell_type, range_inh, range_exc):
+def adjust_ranges(ve, vi, FF, adapt,params,cell_type, range_inh, range_exc, w_prec=False):
     """
     return mu_V, sig_V, tau_V, tauN_V, FF2 that are calculated according to the new ranges
     """
@@ -502,20 +520,21 @@ def adjust_ranges(ve, vi, FF, adapt,params,cell_type, range_inh, range_exc):
         adapt2 = adapt[red].flatten()
 
     # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
-    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,params,cell_type)
+    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,adapt2, params,cell_type,w_prec=w_prec)
 
     return mu_V, sig_V, tau_V, tauN_V, FF2
 ################################################################
 ##### Now fitting to Transfer Function data
 ################################################################
 
-def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=None, range_inh=None, **kwargs):
+def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=None, range_inh=None,w_prec=False, **kwargs):
     """
     DATA                : (str) directory for the npy file containing the firing rates from the simulations
     cell                : (str) cell type to choose the correct parameters of the fit (ex: FS or RS)
     params_file         : directory to the file containing the ranges and the params 
     adapt_file          : directory to the file containing the adaptation from the experiments
     range_exc,range_inh : the ranges to focus the fit of the TF
+    w_prec              : if True use precalculated adaptation in calculations of subthreshold metrics (instead of w=Tw*b*FF)
 
     additional args:
     name_add            : (str) additional name for the file where the P will be saved 
@@ -538,16 +557,16 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     tf_tol, tf_maxiter, tf_method = default_args['tf_tol'],default_args['tf_maxiter'],default_args['tf_method']
     
     FF=np.load(DATA).T #has shape ve*vi bur with the transpose you put the ve to change accross the row, and the vi across the column 
-    adapt = np.load(adapt_file)
+    adapt = np.load(adapt_file).T
     ve, vi, params = np.load(params_file,allow_pickle=True) 
     vve, vvi = np.meshgrid(ve, vi)
 
     #remove nan and inf values
-    ve2, vi2, FF2, adapt2 = get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type)
+    ve2, vi2, FF2, adapt2 = get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, w_prec=w_prec)
 
     #calculate subthresh
     # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
-    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,params,cell_type)
+    mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,adapt2,params,cell_type, w_prec=w_prec)
     Veff_thresh = eff_thresh_estimate(FF2,mu_V, sig_V, tau_V)
 
     # fitting first order Vthr on the phenomenological threshold space
@@ -575,7 +594,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         print("loop n:",i)
         #adjust range
         if range_inh or range_exc:
-            mu_V, sig_V, tau_V,tauN_V, FF2 = adjust_ranges(ve, vi, FF,adapt,params,cell_type, range_inh, range_exc)
+            mu_V, sig_V, tau_V,tauN_V, FF2 = adjust_ranges(ve, vi, FF,adapt,params,cell_type, range_inh, range_exc, w_prec=w_prec)
         
         def res2_func(params):
             res2 = np.mean((output_rate(params,mu_V, sig_V, tau_V, tauN_V) - FF2)**2)
@@ -588,7 +607,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
 
         #originals - calculate mean error
         # muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, adapt,params,cell_type)
-        muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, FF,params,cell_type)
+        muV, sigV, tauV, tauNV = mu_sig_tau_func(vve, vvi, FF,adapt, params,cell_type, w_prec=w_prec)
         fit_rate = output_rate(P,muV, sigV, tauV, tauNV)
         mean_error = np.mean(np.sqrt((FF - fit_rate)**2)) 
 

@@ -3,13 +3,13 @@ import matplotlib.pylab as plt
 import matplotlib
 import sys, pathlib
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[2]))
-from graphs.my_graph import *
+from my_graph import *
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 from transfer_functions.theoretical_tools import *
 
 def make_exc_inh_fig(DATA, P=None):
     
-    MEANfreq, SDfreq, Fe_eff, fiSim, params = np.load(DATA)
+    MEANfreq, SDfreq, Fe_eff, fiSim, params = np.load(DATA, allow_pickle=True)
     Fe_eff, Fout = np.array(Fe_eff), np.array(MEANfreq)
     fiSim = np.meshgrid(np.zeros(Fe_eff.shape[1]), fiSim)[1]
     levels = np.unique(fiSim) # to store for colors
@@ -35,7 +35,7 @@ def make_exc_inh_fig(DATA, P=None):
         SIMvector = MEANfreq[i][:]
         SDvector = SDfreq[i][:]
         feSim = Fe_eff[i][:]
-        feth = np.linspace(feSim.min(), feSim.max(), 1e2)
+        feth = np.linspace(feSim.min(), feSim.max(), int(1e2))
         fi = fiSim[i][0]
 
         r = (float(levels[i])-levels.min())/(levels.max()-levels.min())

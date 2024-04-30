@@ -37,6 +37,8 @@ Ee=0*mV
 Ei=-80*mV
 I = 0*nA
 
+DT=0.1 # time step
+defaultclock.dt = DT*ms
 
 EL_i = -65.0
 EL_e = -64.0
@@ -119,23 +121,43 @@ if type == 'RS':
     statemon_exc = StateMonitor(G_exc, 'vm', record=0)
     spikemon_exc = SpikeMonitor(G_exc)
     wmonitor = StateMonitor(G_exc, 'w', record=0)
+    FRG_exc = PopulationRateMonitor(G_exc)
+
     
     run(TotTime*ms)
 
-    plot(statemon_exc.t/ms, statemon_exc.vm[0])
+    # plot(statemon_exc.t/ms, statemon_exc.vm[0])
 
     mon_vm = statemon_exc[0].vm
+    LfrG_exc=array(FRG_exc.rate/Hz)
+    
+    BIN=5
+    time_array = arange(int(TotTime/DT))*DT
+    TimBinned,popRateG_exc=bin_array(time_array, BIN, time_array),bin_array(LfrG_exc, BIN, time_array)
+    
+    plt.plot(TimBinned,popRateG_exc)
+
     print(mean(mon_vm[int(0.8*len(mon_vm)):len(mon_vm)]))
+    print(mean(popRateG_exc[int(0.8*len(popRateG_exc))::]))
     # for t in spikemon_exc.t:
         # axvline(t/ms, ls='--', c='C1', lw=3)
 elif type =='FS':
     statemon_inh = StateMonitor(G_inh, 'vm', record=0)
     spikemon_inh = SpikeMonitor(G_inh)
+    FRG_inh = PopulationRateMonitor(G_inh)
 
     run(TotTime*ms)
 
-    plot(statemon_inh.t/ms, statemon_inh.vm[0])
-    for t in spikemon_inh.t:
-        axvline(t/ms, ls='--', c='C1', lw=3)
+    LfrG_inh=array(FRG_inh.rate/Hz)
+    BIN=5
+    time_array = arange(int(TotTime/DT))*DT
+    TimBinned,popRateG_inh=bin_array(time_array, BIN, time_array),bin_array(LfrG_inh, BIN, time_array)
+
+    plot(TimBinned,popRateG_inh)
+    print(mean(popRateG_inh))
+
+    # plot(statemon_inh.t/ms, statemon_inh.vm[0])
+    # for t in spikemon_inh.t:
+    #     axvline(t/ms, ls='--', c='C1', lw=3)
 xlabel('Time (ms)')
 ylabel('vm');

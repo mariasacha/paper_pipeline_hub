@@ -93,9 +93,9 @@ params = get_neuron_params_double_cell(CELLS, SI_units = True)
 use_new = args.use_new
 
 if use_new:
-    params['b_e'] = args.b_e
-    params['tau_e'] = args.tau_e
-    params['tau_i'] = args.tau_e
+    params['b_e'] = args.b_e *1e-12
+    params['tau_e'] = args.tau_e *1e-3
+    params['tau_i'] = args.tau_e *1e-3
 
 p = params
 
@@ -139,13 +139,16 @@ AmpStim = args.input #0
 time_peek = 200.
 TauP=20 #20
 
-plat = TotTime - time_peek - TauP #100
+plat = TotTime*1000 - time_peek - TauP #100
+plat = 900
+print("plat=", plat)
 test_input = []
-
-for ji in t:
+t2 = np.arange(0, TotTime*1e3, 0.1)
+for ji in t2:
     test_input.append(0. + input_rate(ji, time_peek, TauP, 1, AmpStim, plat))
 
-print(max(os_noise), min(os_noise))
+# print(max(os_noise), min(os_noise))
+# print(max(test_input), min(os_noise))
 
 #To adjust
 bRS = p['b_e']; #adaptation 
@@ -157,14 +160,15 @@ Eli = p['EL_i'] #leak reversal (inh)
 T = 20*1e-3 # time constant
 
 #Initial Conditions
-fecont=7;
-ficont=8;
+fecont=6;
+ficont=13;
 w=fecont*bRS*twRS
 
 LSw=[]
 LSfe=[]
 LSfi=[]
-
+if AmpStim>0:
+    print("Input = ", AmpStim)
 print("starting")
 for i in range(len(t)):
 
@@ -205,6 +209,8 @@ t_st = 0
 ax3.plot(t[t_st:], LSfe[t_st:],'steelblue', label="Exc")
 ax3.plot(t[t_st:], LSfi[t_st:],'r', label="Inh")
 ax2.plot(t[t_st:], LSw[t_st:], 'orange' , label="W")
+if AmpStim>0:
+    ax3.plot(t[t_st:], test_input[t_st:], 'green' , label="input")
 ax2.set_ylabel('mean w (pA)')
 #ax2.set_ylim(0.0, 0.045)
 ax3.set_xlabel('Time (s)')
