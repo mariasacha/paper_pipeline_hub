@@ -8,6 +8,13 @@ from scipy.ndimage import maximum_filter
 from Tf_calc.cell_library import get_neuron_params_double_cell
 from math import erf
 
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
+from math import erf
+import argparse
+from functions import *
+from Tf_calc.cell_library import get_neuron_params_double_cell
+
 from matplotlib.animation import FuncAnimation
 from IPython.display import HTML
 import matplotlib.pyplot as plt
@@ -84,6 +91,44 @@ def output_rate(params,mu_V, sig_V, tau_V, tauN_V):
 def eff_thresh_estimate(ydata, mu_V, sig_V, tau_V):
     Veff_thresh = mu_V + np.sqrt(2)*sig_V*erfcinv(ydata*2*tau_V)
     return Veff_thresh
+
+def TF(P,fexc,finh,adapt, El):
+    #Transfer Function 
+
+    fe = fexc*(1.-gei)*pconnec*Ntot;
+    fi = finh*gei*pconnec*Ntot;
+    
+    muGi = Qi*Ti*fi;
+    muGe = Qe*Te*fe;
+    muG = Gl+muGe+muGi;
+    muV = (muGe*Ee+muGi*Ei+Gl*El-adapt)/muG;
+    
+    Tm = Cm/muG;
+    
+    Ue =  Qe/muG*(Ee-muV);
+    Ui = Qi/muG*(Ei-muV);
+    sV = np.sqrt(fe*(Ue*Te)*(Ue*Te)/2./(Te+Tm)+fi*(Ui*Ti)*(Ui*Ti)/2./(Ti+Tm));
+    
+    fe= fe+1e-9;
+    fi=fi+1e-9;
+    Tv = ( fe*(Ue*Te)*(Ue*Te) + fi*(Qi*Ui)*(Qi*Ui)) /( fe*(Ue*Te)*(Ue*Te)/(Te+Tm) + fi*(Qi*Ui)*(Qi*Ui)/(Ti+Tm) );
+    TvN = Tv*Gl/Cm;
+    
+    muV0=-60e-3;
+    DmuV0 = 10e-3;
+    sV0 =4e-3;
+    DsV0= 6e-3;
+    TvN0=0.5;
+    DTvN0 = 1.;
+
+    #Effective threshold
+    # vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[5]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[6]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[7]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[8]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[9]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[10]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+    
+    vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[4]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[5]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[6]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[7]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[8]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[9]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+
+    frout=.5/TvN*Gl/Cm*(1-erf((vthr-muV)/np.sqrt(2)/sV));
+    
+    return frout;
 ##### Maria's stuff #####
 def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False, w_prec=False):
     """
@@ -315,7 +360,7 @@ def plot_curve(NAME = 'FS-RS', file_rs ='RS-cell0_CONFIG1_fit_2.npy', file_fs= '
     ficont=10;
 
     LSfe=[]
-    nuev=np.arange(0.00000001,10,step=0.1)
+    nuev=np.arange(0.00000001,20,step=0.1)
 
     nuext = 0 
     nuextin = 0.
@@ -382,7 +427,7 @@ def plot_curve(NAME = 'FS-RS', file_rs ='RS-cell0_CONFIG1_fit_2.npy', file_fs= '
     # Define a function that returns TF_2(nue) - nue
     def func(nue):
         w = nue * bRS * twRS
-        nui_fix = fixed_point(TF_2, [1.0], args=(nue, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=1500)
+        nui_fix = fixed_point(TF_2, [1.0], args=(nue, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=3000)
         TFe_fix = TF_2(nui_fix, nue, nuext, nuextin, PRS, w, Ele)
         # print("TFe_fix:", TFe_fix)
         # print("nui_fix:", nui_fix)
@@ -390,11 +435,11 @@ def plot_curve(NAME = 'FS-RS', file_rs ='RS-cell0_CONFIG1_fit_2.npy', file_fs= '
 
 
     # Use fsolve to find the roots of the difference equation
-    initial_guess = 6  # Initial guess for the root
-    intersection_point = fsolve(func, initial_guess)
+    initial_guess = 10  # Initial guess for the root
+    intersection_point = fsolve(func, initial_guess, maxfev=20000)
     print("solution = ", intersection_point)
 
-    nui_fix = fixed_point(TF_2, [intersection_point], args=(intersection_point, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=1500)
+    nui_fix = fixed_point(TF_2, [intersection_point], args=(intersection_point, nuext, nuextin, PFS, 0., Eli), xtol = 1.e-9, maxiter=3000)
 
     print("solution nui_fix = ",nui_fix)
 
@@ -523,6 +568,158 @@ def adjust_ranges(ve, vi, FF, adapt,params,cell_type, range_inh, range_exc, w_pr
     mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,adapt2, params,cell_type,w_prec=w_prec)
 
     return mu_V, sig_V, tau_V, tauN_V, FF2
+
+def OU(tfin):
+    # Ornstein-Ulhenbeck process
+    
+    theta = 1/(5*1.e-3 )  # Mean reversion rate
+    mu = 0     # Mean of the process
+    sigma = 1   # Volatility or standard deviation
+    dt = 0.1*1.e-3    # Time increment
+    T = tfin        # Total time period
+
+    # Initialize the variables
+    t = np.arange(0, T, dt)         # Time vector
+    n = len(t)                      # Number of time steps
+    x = np.zeros(n)                 # Array to store the process values
+    x[0] = 0  # Initial value
+
+    # Generate the process using the Euler-Maruyama method
+    for i in range(1, n):
+        dx = theta * (mu - x[i-1]) * dt + sigma * np.sqrt(dt) * np.random.normal(0, 1)
+        x[i] = x[i-1] + dx
+    return x
+
+def run_MF(CELLS, AmpStim, PRS, PFS, Iext=0, TotTime=2):
+
+    p = get_neuron_params_double_cell(CELLS, SI_units = True)
+    def TF(P,fexc,finh,adapt, El):
+        #Transfer Function 
+
+        fe = fexc*(1.-gei)*pconnec*Ntot;
+        fi = finh*gei*pconnec*Ntot;
+        
+        muGi = Qi*Ti*fi;
+        muGe = Qe*Te*fe;
+        muG = Gl+muGe+muGi;
+        muV = (muGe*Ee+muGi*Ei+Gl*El-adapt)/muG;
+        
+        Tm = Cm/muG;
+        
+        Ue =  Qe/muG*(Ee-muV);
+        Ui = Qi/muG*(Ei-muV);
+        sV = np.sqrt(fe*(Ue*Te)*(Ue*Te)/2./(Te+Tm)+fi*(Ui*Ti)*(Ui*Ti)/2./(Ti+Tm));
+        
+        fe= fe+1e-9;
+        fi=fi+1e-9;
+        Tv = ( fe*(Ue*Te)*(Ue*Te) + fi*(Qi*Ui)*(Qi*Ui)) /( fe*(Ue*Te)*(Ue*Te)/(Te+Tm) + fi*(Qi*Ui)*(Qi*Ui)/(Ti+Tm) );
+        TvN = Tv*Gl/Cm;
+        
+        muV0=-60e-3;
+        DmuV0 = 10e-3;
+        sV0 =4e-3;
+        DsV0= 6e-3;
+        TvN0=0.5;
+        DTvN0 = 1.;
+
+        #Effective threshold
+        # vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[5]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[6]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[7]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[8]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[9]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[10]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+        
+        vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[4]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[5]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[6]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[7]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[8]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[9]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
+
+        frout=.5/TvN*Gl/Cm*(1-erf((vthr-muV)/np.sqrt(2)/sV));
+        
+        return frout;
+    #Model parameters
+    Gl=p['Gl']; #leak conductance
+    Cm=p['Cm']; #capacitance
+
+    Qe=p['Q_e']; #excitatory quantal conductance
+    Qi=p['Q_i']; #inhibitory quantal conductance
+
+    Ee=p['E_e']; #excitatory reversal potential
+    Ei=p['E_i']; #inhibitory reversal
+
+    twRS=p['tau_w']; #adaptation time constant 
+
+    #Network parameters
+    pconnec= p['p_con']; #probability of connection
+    gei=p['gei']; #percentage of inhibitory cells
+    Ntot=p['Ntot']; #total number of cells
+
+    #Time
+    tfinal=TotTime
+    dt=0.0001
+    t = np.linspace(0, tfinal, int(tfinal/dt))
+
+    # Additive Noise
+    v_drive = Iext
+    sigma=3.5
+    os_noise = sigma*OU(tfinal) + v_drive
+
+    #Create the kick
+    time_peek = 200.
+    TauP=20 #20
+
+    plat = TotTime*1000 - time_peek - TauP #100
+    plat = 900
+    # print("plat=", plat)s
+    test_input = []
+    t2 = np.arange(0, TotTime*1e3, 0.1)
+    for ji in t2:
+        test_input.append(0. + input_rate(ji, time_peek, TauP, 1, AmpStim, plat))
+
+    # print(max(os_noise), min(os_noise))
+    # print(max(test_input), min(os_noise))
+
+    #To adjust
+    bRS = p['b_e']; #adaptation 
+    Te=p['tau_e']; #excitatory synaptic decay
+    Ti=p['tau_i']; #inhibitory synaptic decay
+
+    Ele =p['EL_e'] #leak reversal (exc)
+    Eli = p['EL_i'] #leak reversal (inh)
+    T = 20*1e-3 # time constant
+
+    #Initial Conditions
+    fecont=6;
+    ficont=13;
+    w=fecont*bRS*twRS
+
+    LSw=[]
+    LSfe=[]
+    LSfi=[]
+    if AmpStim>0:
+        print("Input = ", AmpStim)
+    print("starting")
+    for i in range(len(t)):
+
+        if AmpStim>0:
+            # print("Input = ", AmpStim)
+            external_input = test_input[i]
+        else:
+            external_input =os_noise[i]
+        fecontold=fecont
+
+        FEX = fecont + external_input
+        FINH = fecontold + external_input
+
+        if FEX < 0:
+            FEX = 0
+        if FINH < 0:
+            FINH = 0
+
+        fecont+=dt/T*(TF(PRS, FEX,ficont,w, Ele)-fecont)
+        w+=dt*( -w/twRS+(bRS)*fecontold) 
+        ficont+=dt/T*(TF(PFS,FINH,ficont,0., Eli)-ficont)
+
+        LSfe.append(float(fecont))
+        LSfi.append(float(ficont))
+        LSw.append(float(w))
+    
+    return np.mean(LSfe[int(0.5*len(LSfe)):]), np.mean(LSfi[int(0.5*len(LSfi)):])
+
+
 ################################################################
 ##### Now fitting to Transfer Function data
 ################################################################
@@ -547,7 +744,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     """
     default_args = {'loop_n': 10,'window': 12,'thresh_pc': 0.9, 'name_add': '',
         'vthr_tol' : 1e-17, 'vtrh_maxiter': 30000, 'vthr_method': 'SLSQP',
-        'tf_tol' : 1e-17, 'tf_maxiter': 30000, 'tf_method':'nelder-mead'}
+        'tf_tol' : 1e-17, 'tf_maxiter': 30000, 'tf_method':'nelder-mead', 'MF_comp': False, 'seed': 10}
     
     #update arguments
     default_args.update(kwargs)
@@ -555,6 +752,8 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     loop_n, window, thresh_pc, name_add = default_args['loop_n'],default_args['window'],default_args['thresh_pc'], default_args['name_add']
     vthr_tol,vtrh_maxiter,vthr_method = default_args['vthr_tol'],default_args['vtrh_maxiter'],default_args['vthr_method']
     tf_tol, tf_maxiter, tf_method = default_args['tf_tol'],default_args['tf_maxiter'],default_args['tf_method']
+    MF_comp, seed = default_args['MF_comp'], default_args['seed']
+
     
     FF=np.load(DATA).T #has shape ve*vi bur with the transpose you put the ve to change accross the row, and the vi across the column 
     adapt = np.load(adapt_file).T
@@ -565,7 +764,6 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     ve2, vi2, FF2, adapt2 = get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, w_prec=w_prec)
 
     #calculate subthresh
-    # mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, adapt2,params,cell_type)
     mu_V, sig_V, tau_V, tauN_V = mu_sig_tau_func(ve2, vi2, FF2,adapt2,params,cell_type, w_prec=w_prec)
     Veff_thresh = eff_thresh_estimate(FF2,mu_V, sig_V, tau_V)
 
@@ -580,7 +778,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         return res
 
     fit = minimize(res_func, params_init, 
-               method=vthr_method,tol= vthr_tol, options={ 'disp': True, 'maxiter':vtrh_maxiter})
+               method=vthr_method,tol= vthr_tol, options={ 'disp': True, 'maxiter':vtrh_maxiter, 'seed': seed})
     
     print("P = ", fit['x'])
     
@@ -601,7 +799,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
             return res2
 
         fit2 = minimize(res2_func, params_init2, 
-                        method=tf_method,tol= tf_tol , options={'disp': True, 'maxiter':tf_maxiter})
+                        method=tf_method,tol= tf_tol , options={'disp': True, 'maxiter':tf_maxiter, 'seed': seed})
         
         P = fit2['x']
 
@@ -621,13 +819,82 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     params_all = np.array(params_all,dtype='object')
     P = params_all[np.argmin(params_all[:,1])][0] #keep the one with the smallest mean error
     
-    filename = DATA.replace('.npy', f'_{cell_type}_{name_add}_fit.npy')
+    file_name = DATA.replace('ExpTF_','')
+    filename = file_name.replace('.npy', f'_fit.npy')
     print('coefficients saved in ', filename)
     np.save(filename, np.array(P))
 
     return P
 
+def load_network_mean(CELLS, path_net):
+        #load network
+    fr_inh=[]
+    fr_exc=[]
+    for file in os.listdir(path_net):
+        if file.startswith(CELLS):
+            if "inh" in file:
+                mean_fr, amp, _ = np.load(path_net+file, allow_pickle=True)
+                fr_inh.append([mean_fr, amp])
+            elif "exc" in file:
+                mean_fr, amp, _ = np.load(path_net+file, allow_pickle=True)
+                fr_exc.append([mean_fr, amp])
+    fr_exc = np.array(sorted(fr_exc, key=lambda x: x[1]))
+    fr_inh = np.array(sorted(fr_inh, key=lambda x: x[1]))
+    fr_both = np.column_stack((fr_inh[:,0], fr_exc ))
     
+    inputs = fr_both[:,-1]
+
+    return fr_both, inputs
+
+def calculate_mf_difference(CELLS, fr_both, inputs, PRS, PFS):
+    mean_both =[]
+    for AmpStim in inputs:
+        mean_exc, mean_inh = run_MF(CELLS, AmpStim, PRS, PFS, Iext=0, TotTime=2)
+        mean_both.append([mean_inh, mean_exc, AmpStim])
+
+    dif_arr = np.abs(fr_both - np.array(mean_both))
+
+    if dif_arr[:,-1].any() !=0:
+        raise Exception("difference of inputs should be 0 but it is not")
+
+    print("Whole difference: ", dif_arr)
+    print("mean difference exc: ", np.mean(dif_arr[:,1]))
+    print("mean difference inh: ", np.mean(dif_arr[:,0]))
+    
+    dif = np.mean(dif_arr[:,:2])
+
+    return dif 
+
+def fit_with_MF(file, CELLS, param_file, adapt_file,max_iter = 30, dif = 5, range_exc=None, range_inh=None, window=15, loop_n=1, w_prec=True,  path_net= "./net_compar/"):
+    
+    #Generate random seeds
+    random_seeds = np.random.randint(0, 1000, size=max_iter)
+    rs = 0
+
+    PRS = make_fit_from_data_fede(file, 'RS', param_file, adapt_file,range_exc=range_exc, range_inh=range_inh, window=window, loop_n=loop_n, w_prec=w_prec, seed=random_seeds[rs])
+    PFS = make_fit_from_data_fede(file, 'FS', param_file, adapt_file,range_exc=range_exc, range_inh=range_inh, window=window, loop_n=loop_n, w_prec=w_prec, seed=random_seeds[rs])
+
+    #load network
+    fr_both, inputs = load_network_mean(CELLS, path_net)
+
+    # loop until difference is smaller than 2
+    iter = 0
+    while dif>2:
+        # run mf
+        dif = calculate_mf_difference(fr_both, inputs, PRS, PFS)
+
+        if iter>max_iter:
+            print(f"Max iterations ({max_iter}) reached")
+            break
+        
+        rs+=1
+            
+        PRS = make_fit_from_data_fede(file, 'RS', param_file, adapt_file,range_exc=None, range_inh=None, window=15, loop_n=1, w_prec=True, seed=random_seeds[rs])
+        PFS = make_fit_from_data_fede(file, 'FS', param_file, adapt_file,range_exc=None, range_inh=None, window=15, loop_n=1, w_prec=True, seed=random_seeds[rs])
+
+        
+        iter+=1
+
 import argparse
 if __name__=='__main__':
     # First a nice documentation 

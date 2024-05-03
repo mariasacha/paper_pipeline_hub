@@ -90,7 +90,7 @@ sim_name = f'_b_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_eli_{int(EL_i)}_ele_{int(EL_e)
 
 # print("V_m={} , a_i={}, a_e={}, V_r={}, tau_i={}, tau_e={}, b_i={}, b_e={}, delta_i={}, delta_e={}, V_th={}, EL_i={}, EL_e={}, Vcut_i={}, Vcut_e={}".format(V_m, a_i, a_e, V_r, tau_i, tau_e, b_i, b_e, delta_i, delta_e, V_th, EL_i, EL_e,Vcut_i,Vcut_e) )
 
-
+print('b_e= ', b_e, 'plat=', plat)
 eqs = """
 dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
 dw/dt=(a*(vm-EL)-w)/tauw : amp
@@ -206,8 +206,9 @@ if save_path:
     except:
         os.makedirs(save_path)
     
-    np.save(save_path + f'mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), params], dtype=object))
-    np.save(save_path + f'mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), params], dtype=object))
+    print("Exc=", np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), "Inh=",np.mean(popRateG_inh[int(len(popRateG_inh)/2):]))
+    np.save(save_path + f'{CELLS}_mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]),AmpStim, params], dtype=object))
+    np.save(save_path + f'{CELLS}_mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), AmpStim, params], dtype=object))
 
 # # ----- Raster plot + mean adaptation ------
 # fig, axes = figure.add_subplots(2,1,figsize=(8,12))
