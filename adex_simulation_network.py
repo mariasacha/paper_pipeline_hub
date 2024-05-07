@@ -21,6 +21,8 @@ parser.add_argument('--input', type=float, default=0, help='Stable input amplitu
 
 parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
 parser.add_argument('--save_path', default=None, help='save path ')
+parser.add_argument('--save_mean', default=True, help='save mean firing rate (if save_path is provided)')
+parser.add_argument('--save_all', default=False, help='save the whole simulation (if save_path is provided)')
 args = parser.parse_args()
 
 
@@ -46,6 +48,8 @@ for key in params.keys():
 locals().update(extracted_values)
 
 save_path = args.save_path
+save_mean = args.save_mean
+save_all = args.save_all
 
 TotTime = args.time
 Iext = args.iext
@@ -63,6 +67,7 @@ time_peek = 200.
 TauP=20 #20
 
 plat = TotTime - time_peek - TauP #100
+plat = 100
 t2 = np.arange(0, TotTime, DT)
 test_input = []
 
@@ -198,7 +203,7 @@ print('--##End simulation##--')
 # prepare raster plot
 RasG_inh = array([M1G_inh.t/ms, [i+N2 for i in M1G_inh.i]])
 RasG_exc = array([M1G_exc.t/ms, M1G_exc.i])
-TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon)
+TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon, BIN=5)
 
 if save_path:
     try:
@@ -206,12 +211,15 @@ if save_path:
     except:
         os.makedirs(save_path)
     
-    print("Exc=", np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), "Inh=",np.mean(popRateG_inh[int(len(popRateG_inh)/2):]))
-    np.save(save_path + f'{CELLS}_mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]),AmpStim, params], dtype=object))
-    np.save(save_path + f'{CELLS}_mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), AmpStim, params], dtype=object))
+    if save_mean:
+        print("Exc=", np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), "Inh=",np.mean(popRateG_inh[int(len(popRateG_inh)/2):]))
+        np.save(save_path + f'{CELLS}_mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]),AmpStim, params], dtype=object))
+        np.save(save_path + f'{CELLS}_mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), AmpStim, params], dtype=object))
+    if save_all:
+        np.save(save_path + f'{CELLS}_inh_amp_{AmpStim}.npy', np.array([popRateG_inh, AmpStim, params], dtype=object))
+        np.save(save_path + f'{CELLS}_exc_amp_{AmpStim}.npy', np.array([popRateG_exc,AmpStim, params], dtype=object))
 
 # # ----- Raster plot + mean adaptation ------
-# fig, axes = figure.add_subplots(2,1,figsize=(8,12))
 fig, axes = plt.subplots(2,1,figsize=(5,8))
 
 plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name)

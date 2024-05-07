@@ -69,14 +69,14 @@ def OU(tfin):
         x[i] = x[i-1] + dx
     return x
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
 
 parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
 parser.add_argument('--iext', type=float, default=0.3, help='external input - in Hz')
 parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
 parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
-parser.add_argument('--use_new', type=bool, default=False, help='use input parameters - if False: will use the ones in params file')
+parser.add_argument('--use_new', type=bool, default=True, help='use input parameters - if False: will use the ones in params file')
 
 parser.add_argument('--time', type=float, default=10, help='Total Time of simulation - in s')
 

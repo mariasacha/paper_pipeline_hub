@@ -240,13 +240,13 @@ def bin_array(array, BIN, time_array):
     return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 #---------------------------------------------------------------------#
 # prepare firing rate
-def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon ):
+def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5 ):
     def bin_array(array, BIN, time_array):
         N0 = int(BIN/(time_array[1]-time_array[0]))
         N1 = int((time_array[-1]-time_array[0])/BIN)
         return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 
-    BIN=5
+    
     time_array = arange(int(TotTime/DT))*DT
 
     LfrG_exc = array(FRG_exc.rate/Hz)
@@ -1526,16 +1526,17 @@ def load_survival( load = 'tau_e', precalc=False, save_path = './'):
 
 def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , precalc =False, save_im=False, **kwargs):
     
-    default_args = {'z_min': mean_array.min(), 'z_max': mean_array.max(), 'colorscale': None, 'line_color':'white'}
+    default_args = {'z_min': mean_array.min(), 'z_max': mean_array.max(), 'colorscale': None, 'line_color':'white', 'markers':False}
 
     #update arguments
     default_args.update(kwargs)
 
-    z_min, z_max, cscale, line_color =default_args['z_min'],default_args['z_max'], default_args['colorscale'], default_args['line_color']
+    z_min, z_max, cscale, line_color, MARK =default_args['z_min'],default_args['z_max'], default_args['colorscale'], default_args['line_color'], default_args['markers']
 
     if load == 'tau_i':
         if not cscale: 
-            colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
+            colorscale = [ [0, 'black'], [700/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
+
         else:
             colorscale = cscale
         # colorscale = 'jet'
@@ -1565,8 +1566,8 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         y_trace=[b for b in bthr if b<=np.max(bvals)]
         x_trace=[dict_b_t[b] for b in y_trace]
         if precalc:
-            x_trace = tauis[3:-15]
-            y_trace = bthr[3:-15]
+            x_trace = tauis[0:-15]
+            y_trace = bthr[0:-15]
             x_ticks = 16
             y_ticks = 10
         else:
@@ -1592,38 +1593,39 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         y=y_trace,
         line=dict(color=line_color,width=2), showlegend=False), secondary_y=False,)
 
-    fig.add_trace(go.Scatter(
-        mode='markers',
-        x=[5],
-        y=[3],
-        marker=dict(
-            symbol='square',
-            size=7,
-            color='white',
-            line=dict(
-                color='red',
-                width=1.5
-            )
-        ),
-    showlegend=False
-    ))
+    if MARK:
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=[5],
+            y=[3],
+            marker=dict(
+                symbol='square',
+                size=7,
+                color='white',
+                line=dict(
+                    color='red',
+                    width=1.5
+                )
+            ),
+        showlegend=False
+        ))
 
 
-    fig.add_trace(go.Scatter(
-        mode='markers',
-        x=[3.5],
-        y=[3],
-        marker=dict(
-            symbol='square',
-            size=7,
-            color='black',
-            line=dict(
-                color='red',
-                width=1.5
-            )
-        ),
-    showlegend=False
-    ))
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=[3.5],
+            y=[3],
+            marker=dict(
+                symbol='square',
+                size=7,
+                color='black',
+                line=dict(
+                    color='red',
+                    width=1.5
+                )
+            ),
+        showlegend=False
+        ))
 
     matplotlib_figsize = (6, 3.5)
     inch_to_pixels = 80
