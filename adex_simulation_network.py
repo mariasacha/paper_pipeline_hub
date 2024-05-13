@@ -17,6 +17,7 @@ parser.add_argument('--use_new', type=bool, default=False, help='use input param
 
 parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
 parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
+parser.add_argument('--plat_dur', type=float, default=0, help='If 0 the input will be applied for the whole duration of the simulation')
 # parser.add_argument('--model', type=str, default='adex', help='model to run')
 
 parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
@@ -66,8 +67,10 @@ AmpStim = args.input #0
 time_peek = 200.
 TauP=20 #20
 
-plat = TotTime - time_peek - TauP #100
-plat = 100
+if not args.plat_dur:
+    plat = TotTime - time_peek - TauP #100
+else:
+    plat = args.plat_dur
 t2 = np.arange(0, TotTime, DT)
 test_input = []
 
@@ -212,10 +215,12 @@ if save_path:
         os.makedirs(save_path)
     
     if save_mean:
-        print("Exc=", np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), "Inh=",np.mean(popRateG_inh[int(len(popRateG_inh)/2):]))
+        print("Saving the mean")
+        # print("Exc=", np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), "Inh=",np.mean(popRateG_inh[int(len(popRateG_inh)/2):]))
         np.save(save_path + f'{CELLS}_mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]),AmpStim, params], dtype=object))
         np.save(save_path + f'{CELLS}_mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), AmpStim, params], dtype=object))
     if save_all:
+        print("Saving the whole simulation")
         np.save(save_path + f'{CELLS}_inh_amp_{AmpStim}.npy', np.array([popRateG_inh, AmpStim, params], dtype=object))
         np.save(save_path + f'{CELLS}_exc_amp_{AmpStim}.npy', np.array([popRateG_exc,AmpStim, params], dtype=object))
 

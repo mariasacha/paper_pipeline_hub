@@ -31,6 +31,7 @@ def eff_thresh(mu_V, sig_V, tauN_V, params):
     tau_0 = 0.5
     tau_d = 1.0
 
+
     V1 = (P_mu*(mu_V - mu_0) / mu_d +
           P_sig*(sig_V - sig_0) / sig_d +
           P_tau*(tauN_V - tau_0) / tau_d)
@@ -66,8 +67,9 @@ def mu_sig_tau_func(fexc, finh, fout,w_ad,params,cell_type, w_prec=False):
     mu_Gi = f_i*tau_i*Q_i
     mu_G = mu_Ge  + mu_Gi + g_L
     tau_eff = C_m / mu_G
-    
+    print(finh.shape)
     if w_prec:
+        print(w_ad.shape)
         mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - w_ad) / mu_G
     else:
         mu_V = (mu_Ge*E_e +  mu_Gi*E_i + g_L*E_L - fout*Tw*b + a*E_L) / mu_G
@@ -86,6 +88,7 @@ def mu_sig_tau_func(fexc, finh, fout,w_ad,params,cell_type, w_prec=False):
 
 def output_rate(params,mu_V, sig_V, tau_V, tauN_V):
     f_out = erfc((eff_thresh(mu_V, sig_V, tauN_V, params) - mu_V) / (np.sqrt(2)*sig_V)) / (2*tau_V)
+    # f_out = 0.5*tau_V* (1-erf((eff_thresh(mu_V, sig_V, tauN_V, params) - mu_V) / (np.sqrt(2)*sig_V)))
     return f_out
 
 def eff_thresh_estimate(ydata, mu_V, sig_V, tau_V):
@@ -127,6 +130,7 @@ def TF(P,fexc,finh,adapt, El):
     vthr=P[0]+P[1]*(muV-muV0)/DmuV0+P[2]*(sV-sV0)/DsV0+P[3]*(TvN-TvN0)/DTvN0+P[4]*((muV-muV0)/DmuV0)*((muV-muV0)/DmuV0)+P[5]*((sV-sV0)/DsV0)*((sV-sV0)/DsV0)+P[6]*((TvN-TvN0)/DTvN0)*((TvN-TvN0)/DTvN0)+P[7]*(muV-muV0)/DmuV0*(sV-sV0)/DsV0+P[8]*(muV-muV0)/DmuV0*(TvN-TvN0)/DTvN0+P[9]*(sV-sV0)/DsV0*(TvN-TvN0)/DTvN0;
 
     frout=.5/TvN*Gl/Cm*(1-erf((vthr-muV)/np.sqrt(2)/sV));
+    # frout=.5*Tv*(1-erf((vthr-muV)/(np.sqrt(2)*sV)));
     
     return frout;
 ##### Maria's stuff #####
@@ -138,7 +142,7 @@ def get_rid_of_nans(vve, vvi, adapt, FF, params, cell_type, return_index=False, 
     vi2 = vvi.flatten()
     FF2 = FF.flatten()
     adapt2= adapt.flatten()
-
+    print(ve2.shape, vi2.shape, FF2.shape, adapt2.shape)
     # FF2[FF2<1e-9] = 1e-9 
 
         # Calculate Veff:
@@ -723,6 +727,7 @@ def run_MF(CELLS, AmpStim, PRS, PFS, Iext=0, TotTime=2):
 ################################################################
 ##### Now fitting to Transfer Function data
 ################################################################
+from scipy.optimize import basinhopping
 
 def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=None, range_inh=None,w_prec=False, **kwargs):
     """
@@ -777,9 +782,17 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         res = np.mean((Veff_thresh - vthresh)**2)
         return res
 
-    fit = minimize(res_func, params_init, 
-               method=vthr_method,tol= vthr_tol, options={ 'disp': True, 'maxiter':vtrh_maxiter, 'seed': seed})
+    # fit = minimize(res_func, params_init, 
+    #            method=vthr_method,tol= vthr_tol, options={ 'disp': True, 'maxiter':vtrh_maxiter, 'seed': seed})
     
+    minimizer_kwargs = {
+    'method': vthr_method,
+    'tol': vthr_tol,
+    'options': {'disp': True, 'maxiter': vtrh_maxiter}}
+
+    # Perform basinhopping optimization
+    fit = basinhopping(res_func, params_init, minimizer_kwargs=minimizer_kwargs, niter_success=10)
+
     print("P = ", fit['x'])
     
     print("Fitting Transfer Function..")
@@ -801,6 +814,13 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         fit2 = minimize(res2_func, params_init2, 
                         method=tf_method,tol= tf_tol , options={'disp': True, 'maxiter':tf_maxiter, 'seed': seed})
         
+        minimizer_kwargs = {
+        'method': tf_method,
+        'tol': tf_tol,
+        'options': {'disp': True, 'maxiter': tf_maxiter}}
+
+        # Perform basinhopping optimization
+        # fit2 = basinhopping(res2_func, params_init2, minimizer_kwargs=minimizer_kwargs,niter_success=10, T=10)
         P = fit2['x']
 
         #originals - calculate mean error
@@ -810,11 +830,13 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         mean_error = np.mean(np.sqrt((FF - fit_rate)**2)) 
 
         #renew ranges and params
-        range_exc, range_inh = find_max_error(FF, fit_rate, ve, vi, window=window, thresh_pc = thresh_pc)
-        params_init2 = P
+        if loop_n>1:
+            range_exc, range_inh = find_max_error(FF, fit_rate, ve, vi, window=window, thresh_pc = thresh_pc)
+            params_init2 = P
 
         params_all.append([P, mean_error])
         i+=1
+        seed+=10
 
     params_all = np.array(params_all,dtype='object')
     P = params_all[np.argmin(params_all[:,1])][0] #keep the one with the smallest mean error
@@ -831,7 +853,7 @@ def load_network_mean(CELLS, path_net):
     fr_inh=[]
     fr_exc=[]
     for file in os.listdir(path_net):
-        if file.startswith(CELLS):
+        if file.startswith(CELLS + '_mean'):
             if "inh" in file:
                 mean_fr, amp, _ = np.load(path_net+file, allow_pickle=True)
                 fr_inh.append([mean_fr, amp])
@@ -857,6 +879,7 @@ def calculate_mf_difference(CELLS, fr_both, inputs, PRS, PFS):
     if dif_arr[:,-1].any() !=0:
         raise Exception("difference of inputs should be 0 but it is not")
 
+    dif_arr[:,2] = inputs
     print("Whole difference: ", dif_arr)
     print("mean difference exc: ", np.mean(dif_arr[:,1]))
     print("mean difference inh: ", np.mean(dif_arr[:,0]))
