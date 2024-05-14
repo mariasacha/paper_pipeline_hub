@@ -1499,12 +1499,12 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 def load_survival( load = 'tau_e', precalc=False, save_path = './'):
     if precalc:
         if load == 'tau_e':
-            mean_array = np.load('./dynamical_precalc/mean_array_tau_e.npy')
-            taus = list(np.load('./dynamical_precalc/taues_bcrit.npy'))
-            bthr = list(np.load('./dynamical_precalc/bthr_taues_bcrit.npy'))
+            mean_array = np.load('./dynamical_precalc/tau_e_mean_array.npy')
+            taus =  list(np.load('./dynamical_precalc/' + f'b_thresh_tau_e.npy')[:,0])
+            bthr = list(np.load('./dynamical_precalc/'+ f'b_thresh_tau_e.npy')[:,-1])
 
-            tau_v = np.arange(3.5,7.0,0.1)
-            bvals = np.arange(0,30,1)
+            tau_v = np.load('./dynamical_precalc/' + f'tau_e_heatmap_taus.npy')
+            bvals =np.load('./dynamical_precalc/' + f'tau_e_heatmap_bvals.npy')
         elif load == 'tau_i':
             mean_array = np.load('./dynamical_precalc/mean_array_tau_i.npy')
             taus = list(np.load('./dynamical_precalc/tauis_bcrit.npy'))
@@ -1526,16 +1526,17 @@ def load_survival( load = 'tau_e', precalc=False, save_path = './'):
 
 def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , precalc =False, save_im=False, **kwargs):
     
-    default_args = {'z_min': mean_array.min(), 'z_max': mean_array.max(), 'colorscale': None, 'line_color':'white'}
+    default_args = {'z_min': mean_array.min(), 'z_max': mean_array.max(), 'colorscale': None, 'line_color':'white', 'markers':False, 'mark_1':(0,0), 'mark_2':(0,0)}
 
     #update arguments
     default_args.update(kwargs)
 
     z_min, z_max, cscale, line_color =default_args['z_min'],default_args['z_max'], default_args['colorscale'], default_args['line_color']
+    markers, mark_1, mark_2 = default_args['markers'], default_args['mark_1'], default_args['mark_2']
 
     if load == 'tau_i':
         if not cscale: 
-            colorscale = [ [0, 'black'], [400/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
+            colorscale = [ [0, 'black'], [700/1000, 'royalblue'],[1000/1000, 'white'],[1, 'white']]
         else:
             colorscale = cscale
         # colorscale = 'jet'
@@ -1546,6 +1547,13 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
             y_trace=bthr[17:]
             x_ticks = 12
             y_ticks = 12
+            # x_trace=tauis  
+            # y_trace=bthr
+            # dict_b_t = {b:t for b,t in zip(bthr, tauis)}
+            # y_trace=[b for b in bthr if b<=np.max(bvals)]
+            # x_trace=[dict_b_t[b] for b in y_trace]
+            # x_ticks = int(len(x_trace)/4)
+            # y_ticks = int(len(y_trace)/4)  
         else:
             x_trace=tauis  
             y_trace=bthr
@@ -1565,8 +1573,8 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         y_trace=[b for b in bthr if b<=np.max(bvals)]
         x_trace=[dict_b_t[b] for b in y_trace]
         if precalc:
-            x_trace = tauis[3:-15]
-            y_trace = bthr[3:-15]
+            x_trace = tauis[0:-14]
+            y_trace = bthr[0:-14]
             x_ticks = 16
             y_ticks = 10
         else:
@@ -1591,39 +1599,40 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         x=x_trace, 
         y=y_trace,
         line=dict(color=line_color,width=2), showlegend=False), secondary_y=False,)
+    
+    if markers:
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=[mark_1[0]],
+            y=[mark_1[1]],
+            marker=dict(
+                symbol='square',
+                size=7,
+                color='white',
+                line=dict(
+                    color='red',
+                    width=1.5
+                )
+            ),
+        showlegend=False
+        ))
 
-    fig.add_trace(go.Scatter(
-        mode='markers',
-        x=[5],
-        y=[3],
-        marker=dict(
-            symbol='square',
-            size=7,
-            color='white',
-            line=dict(
-                color='red',
-                width=1.5
-            )
-        ),
-    showlegend=False
-    ))
 
-
-    fig.add_trace(go.Scatter(
-        mode='markers',
-        x=[3.5],
-        y=[3],
-        marker=dict(
-            symbol='square',
-            size=7,
-            color='black',
-            line=dict(
-                color='red',
-                width=1.5
-            )
-        ),
-    showlegend=False
-    ))
+        fig.add_trace(go.Scatter(
+            mode='markers',
+            x=[mark_2[0]],
+            y=[mark_2[1]],
+            marker=dict(
+                symbol='square',
+                size=7,
+                # color='black',
+                line=dict(
+                    color='red',
+                    width=1.5
+                )
+            ),
+        showlegend=False
+        ))
 
     matplotlib_figsize = (6, 3.5)
     inch_to_pixels = 80

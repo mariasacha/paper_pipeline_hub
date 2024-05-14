@@ -139,7 +139,8 @@ AmpStim = args.input #0
 time_peek = 200.
 TauP=20 #20
 
-plat = TotTime - time_peek - TauP #100
+plat = (TotTime/dt - time_peek*1e-3/dt - TauP*1e-3/dt)*dt #100
+print(plat, len(t))
 test_input = []
 
 for ji in t:
@@ -157,8 +158,8 @@ Eli = p['EL_i'] #leak reversal (inh)
 T = 20*1e-3 # time constant
 
 #Initial Conditions
-fecont=7;
-ficont=8;
+fecont=5;
+ficont=7;
 w=fecont*bRS*twRS
 
 LSw=[]
