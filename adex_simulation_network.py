@@ -17,10 +17,13 @@ parser.add_argument('--use_new', type=bool, default=False, help='use input param
 
 parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
 parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
+parser.add_argument('--plat_dur', type=float, default=0, help='If 0 the input will be applied for the whole duration of the simulation')
 # parser.add_argument('--model', type=str, default='adex', help='model to run')
 
 parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
 parser.add_argument('--save_path', default=None, help='save path ')
+parser.add_argument('--save_mean', default=True, help='save mean firing rate (if save_path is provided)')
+parser.add_argument('--save_all', default=False, help='save the whole simulation (if save_path is provided)')
 args = parser.parse_args()
 
 
@@ -46,6 +49,8 @@ for key in params.keys():
 locals().update(extracted_values)
 
 save_path = args.save_path
+save_mean = args.save_mean
+save_all = args.save_all
 
 TotTime = args.time
 Iext = args.iext
@@ -62,7 +67,10 @@ AmpStim = args.input #0
 time_peek = 200.
 TauP=20 #20
 
-plat = TotTime - time_peek - TauP #100
+if not args.plat_dur:
+    plat = TotTime - time_peek - TauP #100
+else:
+    plat = args.plat_dur
 t2 = np.arange(0, TotTime, DT)
 test_input = []
 
@@ -90,7 +98,7 @@ sim_name = f'_b_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_eli_{int(EL_i)}_ele_{int(EL_e)
 
 # print("V_m={} , a_i={}, a_e={}, V_r={}, tau_i={}, tau_e={}, b_i={}, b_e={}, delta_i={}, delta_e={}, V_th={}, EL_i={}, EL_e={}, Vcut_i={}, Vcut_e={}".format(V_m, a_i, a_e, V_r, tau_i, tau_e, b_i, b_e, delta_i, delta_e, V_th, EL_i, EL_e,Vcut_i,Vcut_e) )
 
-
+print('b_e= ', b_e, 'plat=', plat)
 eqs = """
 dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
 dw/dt=(a*(vm-EL)-w)/tauw : amp
@@ -198,7 +206,7 @@ print('--##End simulation##--')
 # prepare raster plot
 RasG_inh = array([M1G_inh.t/ms, [i+N2 for i in M1G_inh.i]])
 RasG_exc = array([M1G_exc.t/ms, M1G_exc.i])
-TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon)
+TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon, BIN=5)
 
 if save_path:
     try:
@@ -206,11 +214,17 @@ if save_path:
     except:
         os.makedirs(save_path)
     
-    np.save(save_path + f'mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), params], dtype=object))
-    np.save(save_path + f'mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), params], dtype=object))
+    if save_mean:
+        print("Saving the mean")
+        # print("Exc=", np.mean(popRateG_exc[int(len(popRateG_exc)/2):]), "Inh=",np.mean(popRateG_inh[int(len(popRateG_inh)/2):]))
+        np.save(save_path + f'{CELLS}_mean_exc_amp_{AmpStim}.npy', np.array([np.mean(popRateG_exc[int(len(popRateG_exc)/2):]),AmpStim, params], dtype=object))
+        np.save(save_path + f'{CELLS}_mean_inh_amp_{AmpStim}.npy', np.array([np.mean(popRateG_inh[int(len(popRateG_inh)/2):]), AmpStim, params], dtype=object))
+    if save_all:
+        print("Saving the whole simulation")
+        np.save(save_path + f'{CELLS}_inh_amp_{AmpStim}.npy', np.array([popRateG_inh, AmpStim, params], dtype=object))
+        np.save(save_path + f'{CELLS}_exc_amp_{AmpStim}.npy', np.array([popRateG_exc,AmpStim, params], dtype=object))
 
 # # ----- Raster plot + mean adaptation ------
-# fig, axes = figure.add_subplots(2,1,figsize=(8,12))
 fig, axes = plt.subplots(2,1,figsize=(5,8))
 
 plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name)

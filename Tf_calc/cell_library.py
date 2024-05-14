@@ -17,6 +17,47 @@ def get_neuron_params_double_cell(NAME, SI_units=False):
                    'tau_e': 5, 'tau_i': 5, 'E_e': 0, 'E_i': -80, 'Q_i': 5.0, 'Q_e': 1.5,
                 # Network
                   'p_con': 0.05, 'gei': 0.2, 'Ntot': 10000}
+    elif NAME == 'FS-RS_10': 
+        params = {#Cells
+            'V_m': -60, 'V_r': -65, 'Cm': 200, 'Gl': 10, 'tau_w': 500, 'V_th': -50, 'V_cut' : -30,
+                #Excitatory
+                  'a_e': 0,   'b_e': 10,  'delta_e': 2, 'EL_e': -64,
+                # Inhibitory
+                  'a_i': 0,'b_i': 0,'delta_i': 0.5,'EL_i': -65,
+                # Synaptic
+                   'tau_e': 5, 'tau_i': 5, 'E_e': 0, 'E_i': -80, 'Q_i': 5.0, 'Q_e': 1.5,
+                # Network
+                  'p_con': 0.05, 'gei': 0.2, 'Ntot': 10000}
+    elif NAME == 'FS-RS_0': 
+        params = {#Cells
+            'V_m': -60, 'V_r': -65, 'Cm': 200, 'Gl': 10, 'tau_w': 500, 'V_th': -50, 'V_cut' : -30,
+                #Excitatory
+                  'a_e': 0,   'b_e': 0,  'delta_e': 2, 'EL_e': -64,
+                # Inhibitory
+                  'a_i': 0,'b_i': 0,'delta_i': 0.5,'EL_i': -65,
+                # Synaptic
+                   'tau_e': 5, 'tau_i': 5, 'E_e': 0, 'E_i': -80, 'Q_i': 5.0, 'Q_e': 1.5,
+                # Network
+                  'p_con': 0.05, 'gei': 0.2, 'Ntot': 10000}
+        
+    elif NAME == 'FS': 
+        params = {#Cells
+            'V_m': -60, 'V_r': -65, 'Cm': 200, 'Gl': 10, 'tau_w': 500, 'V_th': -50, 'V_cut' : -30,
+                # Inhibitory
+                  'a': 0,'b': 0,'delta': 0.5,'EL': -65,
+                # Synaptic
+                   'tau_e': 5, 'tau_i': 5, 'E_e': 0, 'E_i': -80, 'Q_i': 5.0, 'Q_e': 1.5,
+                # Network
+                  'p_con': 0.05, 'gei': 0.2, 'Ntot': 10000}
+    elif NAME == 'RS': 
+        params = {#Cells
+            'V_m': -60, 'V_r': -65, 'Cm': 200, 'Gl': 10, 'tau_w': 500, 'V_th': -50, 'V_cut' : -30,
+                # Inhibitory
+                  'a': 0,'b': 10,'delta': 2,'EL': -64,
+                # Synaptic
+                   'tau_e': 5, 'tau_i': 5, 'E_e': 0, 'E_i': -80, 'Q_i': 5.0, 'Q_e': 1.5,
+                # Network
+                  'p_con': 0.05, 'gei': 0.2, 'Ntot': 10000}
     else:
         print('====================================================')
         print('------------ CELL NOT RECOGNIZED !! ---------------')
@@ -47,13 +88,13 @@ def get_neuron_params(NAME, name='', number=1, SI_units=False):
     if NAME=='FS-cell':
         params = {'name':name, 'N':number,\
                   'Gl':10., 'Cm':200.,'Trefrac':5.,\
-                  'El':-65., 'Vthre':-50., 'Vreset':-65., 'delta_v':0.5,\
-                  'a':0., 'b': 0., 'tauw':500}
+                  'EL':-65., 'V_th':-50., 'V_r':-65., 'delta':0.5,\
+                  'a':0., 'b': 0., 'tau_w':500, }
     elif NAME=='RS-cell':
         params = {'name':name, 'N':number,\
                   'Gl':10., 'Cm':200.,'Trefrac':5.,\
-                  'El':-64., 'Vthre':-50., 'Vreset':-65., 'delta_v':2.,\
-                  'a':0., 'b':20., 'tauw':500.}
+                  'EL':-64., 'V_th':-50., 'V_r':-65., 'delta':2.,\
+                  'a':0., 'b':20., 'tau_w':500.}
     else:
         print('====================================================')
         print('------------ CELL NOT RECOGNIZED !! ---------------')

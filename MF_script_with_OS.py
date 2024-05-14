@@ -69,14 +69,14 @@ def OU(tfin):
         x[i] = x[i-1] + dx
     return x
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
 
 parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
 parser.add_argument('--iext', type=float, default=0.3, help='external input - in Hz')
 parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
 parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
-parser.add_argument('--use_new', type=bool, default=False, help='use input parameters - if False: will use the ones in params file')
+parser.add_argument('--use_new', type=bool, default=True, help='use input parameters - if False: will use the ones in params file')
 
 parser.add_argument('--time', type=float, default=10, help='Total Time of simulation - in s')
 
@@ -93,9 +93,9 @@ params = get_neuron_params_double_cell(CELLS, SI_units = True)
 use_new = args.use_new
 
 if use_new:
-    params['b_e'] = args.b_e
-    params['tau_e'] = args.tau_e
-    params['tau_i'] = args.tau_e
+    params['b_e'] = args.b_e *1e-12
+    params['tau_e'] = args.tau_e *1e-3
+    params['tau_i'] = args.tau_e *1e-3
 
 p = params
 
@@ -139,14 +139,16 @@ AmpStim = args.input #0
 time_peek = 200.
 TauP=20 #20
 
-plat = (TotTime/dt - time_peek*1e-3/dt - TauP*1e-3/dt)*dt #100
-print(plat, len(t))
+plat = TotTime*1000 - time_peek - TauP #100
+plat = 900
+print("plat=", plat)
 test_input = []
-
-for ji in t:
+t2 = np.arange(0, TotTime*1e3, 0.1)
+for ji in t2:
     test_input.append(0. + input_rate(ji, time_peek, TauP, 1, AmpStim, plat))
 
-print(max(os_noise), min(os_noise))
+# print(max(os_noise), min(os_noise))
+# print(max(test_input), min(os_noise))
 
 #To adjust
 bRS = p['b_e']; #adaptation 
@@ -158,14 +160,15 @@ Eli = p['EL_i'] #leak reversal (inh)
 T = 20*1e-3 # time constant
 
 #Initial Conditions
-fecont=5;
-ficont=7;
+fecont=6;
+ficont=13;
 w=fecont*bRS*twRS
 
 LSw=[]
 LSfe=[]
 LSfi=[]
-
+if AmpStim>0:
+    print("Input = ", AmpStim)
 print("starting")
 for i in range(len(t)):
 
@@ -206,6 +209,8 @@ t_st = 0
 ax3.plot(t[t_st:], LSfe[t_st:],'steelblue', label="Exc")
 ax3.plot(t[t_st:], LSfi[t_st:],'r', label="Inh")
 ax2.plot(t[t_st:], LSw[t_st:], 'orange' , label="W")
+if AmpStim>0:
+    ax3.plot(t[t_st:], test_input[t_st:], 'green' , label="input")
 ax2.set_ylabel('mean w (pA)')
 #ax2.set_ylim(0.0, 0.045)
 ax3.set_xlabel('Time (s)')

@@ -240,13 +240,13 @@ def bin_array(array, BIN, time_array):
     return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 #---------------------------------------------------------------------#
 # prepare firing rate
-def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon ):
+def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5 ):
     def bin_array(array, BIN, time_array):
         N0 = int(BIN/(time_array[1]-time_array[0]))
         N1 = int((time_array[-1]-time_array[0])/BIN)
         return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 
-    BIN=5
+    
     time_array = arange(int(TotTime/DT))*DT
 
     LfrG_exc = array(FRG_exc.rate/Hz)
@@ -1456,6 +1456,7 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 
                 sim_name = f"b_{b_ad}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
                 name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
+                name_exc = save_path  + sim_name + '_exc.npy'
                 name_inh = save_path + sim_name + '_inh.npy'
 
                 #Using the exc FR but can use the inh instead
@@ -1465,11 +1466,19 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
                     try:
                         sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{float(nseed)}"
                         name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
+                        name_exc = save_path + sim_name + '_exc.npy'
                         popRateG_exc = np.load(name_exc)[:load_until]
                     except FileNotFoundError:
-                        sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
-                        name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
-                        popRateG_exc = np.load(name_exc)[:load_until]
+                        try:
+                            sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
+                            name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
+                            name_exc = save_path + sim_name + '_exc.npy'
+                            popRateG_exc = np.load(name_exc)[:load_until]
+                        except FileNotFoundError:
+                            sim_name = f"b_{int(b_ad)}_tau_i_{int(tau_I)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{int(nseed)}"
+                            name_exc = save_path + '/network_sims/' + sim_name + '_exc_vol2.npy'
+                            name_exc = save_path + sim_name + '_exc_vol2.npy'
+                            popRateG_exc = np.load(name_exc)[:load_until]                            
 
                 # popRateG_inh = np.load(path + name_inh)[:load_until]
                 
@@ -1488,13 +1497,13 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 
     mean_array = np.mean(allseeds_arr, axis=0)
 
-
     np.save(save_path + f"{tau_str}_mean_array.npy", mean_array)
     np.save(save_path + f"{tau_str}_heatmap_bvals.npy", bvals)
     np.save(save_path + f"{tau_str}_heatmap_taus.npy", tauv)
 
     clear_output(wait=False)
     print("Done! Saved in :", save_path)
+    print(mean_array.shape)
 
 def load_survival( load = 'tau_e', precalc=False, save_path = './'):
     if precalc:
@@ -1565,6 +1574,8 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
     elif load=='tau_e':
         if not cscale: 
             colorscale = 'hot'
+            colorscale = [ [0, 'black'], [500/1000, 'red'],[1000/1000, 'white'],[1, 'white']]
+
         else:
             colorscale = cscale
         x_heat = tau_v
@@ -1578,12 +1589,13 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
             x_ticks = 16
             y_ticks = 10
         else:
-            # x_trace=tauis  
-            # y_trace=bthr
+            x_trace=tauis  
+            y_trace=bthr
             # dict_b_t = {b:t for b,t in zip(bthr, tauis)}
-            # y_trace=[b for b in bthr if b<=np.max(bvals)]
+            y_trace=[b for b in bthr if b<=np.max(bvals)]
             # x_trace=[dict_b_t[b] for b in y_trace]
             x_ticks = int(len(x_trace)/4)
+            x_ticks=10
             y_ticks = int(len(y_trace)/4) 
 
     
