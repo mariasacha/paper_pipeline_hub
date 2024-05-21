@@ -206,8 +206,12 @@ print('--##End simulation##--')
 # prepare raster plot
 RasG_inh = array([M1G_inh.t/ms, [i+N2 for i in M1G_inh.i]])
 RasG_exc = array([M1G_exc.t/ms, M1G_exc.i])
+if AmpStim>0:
+    time_array = arange(int(TotTime/DT))*DT
+    input_bin = bin_array(np.array(test_input), 5, time_array)
+else:
+    input_bin = np.full(1,np.nan)
 TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon, BIN=5)
-
 if save_path:
     try:
         os.listdir(save_path)
@@ -227,7 +231,7 @@ if save_path:
 # # ----- Raster plot + mean adaptation ------
 fig, axes = plt.subplots(2,1,figsize=(5,8))
 
-plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name)
+plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin)
 
 
 print(f" done")

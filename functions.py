@@ -180,6 +180,8 @@ def plot_raster_meanFR_tau_i(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRate
 
     ax3.plot(TimBinned/1000,popRateG_inh, 'r')
     ax3.plot(TimBinned/1000,popRateG_exc, 'SteelBlue')
+    if AmpStim>0:
+        ax3.plot(TimBinned/1000, test_input[t_st:], 'green' , label="input")
     ax2.plot(TimBinned/1000,(Pu/8000), 'orange')
     ax2.set_ylabel('mean w (pA)')
     #ax2.set_ylim(0.0, 0.045)
@@ -204,7 +206,7 @@ def plot_raster_meanFR_tau_i(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRate
     # fig.savefig(fol_name + sim_name + '_raster_plot_mean_w' + '.png')
     # plt.close()
 
-def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name):
+def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin):
     
     # fig=figure(figsize=(8,12))
     ax1 = axes[0]
@@ -221,6 +223,8 @@ def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc,
 
     ax3.plot(TimBinned/1000,popRateG_inh, 'r', label='Inh')
     ax3.plot(TimBinned/1000,popRateG_exc, 'SteelBlue', label='Exc')
+    if not np.isnan(input_bin).all():
+        ax3.plot(TimBinned/1000,input_bin, 'green', label='input')
     ax2.plot(TimBinned/1000,(Pu/8000), 'orange', label='W')
     ax2.set_ylabel('mean w (pA)')
     #ax2.set_ylim(0.0, 0.045)
@@ -240,12 +244,12 @@ def bin_array(array, BIN, time_array):
     return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 #---------------------------------------------------------------------#
 # prepare firing rate
-def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5 ):
+def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5):
     def bin_array(array, BIN, time_array):
         N0 = int(BIN/(time_array[1]-time_array[0]))
         N1 = int((time_array[-1]-time_array[0])/BIN)
         return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
-
+    
     
     time_array = arange(int(TotTime/DT))*DT
 
@@ -256,6 +260,7 @@ def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5 ):
     TimBinned,popRateG_inh = bin_array(time_array, BIN, time_array),bin_array(LfrG_inh, BIN, time_array)
 
     TimBinned,Pu = bin_array(time_array, BIN, time_array),bin_array(P2mon[0].P, BIN, time_array)
+
 
     return TimBinned, popRateG_exc, popRateG_inh, Pu
 
