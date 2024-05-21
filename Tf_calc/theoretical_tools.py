@@ -220,7 +220,7 @@ def plot_check_fit(file, param_file, adapt_file ,cell_type, P, w_prec=False):
     ax.text(0.5, 0.95, f'dev: {mean_error:.2f} Hz', transform=ax.transAxes, ha='center')
     plt.show()
 
-def video_check_fit(file, param_file, adapt_file ,cell_type, P, w_prec=False):
+def video_check_fit(file, param_file, adapt_file ,cell_type, P, w_prec=True):
     
     ve, vi, params = np.load(param_file,allow_pickle=True)
     adapt = np.load(adapt_file).T
@@ -782,8 +782,8 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
         res = np.mean((Veff_thresh - vthresh)**2)
         return res
 
-    # fit = minimize(res_func, params_init, 
-    #            method=vthr_method,tol= vthr_tol, options={ 'disp': True, 'maxiter':vtrh_maxiter, 'seed': seed})
+    fit = minimize(res_func, params_init, 
+               method=vthr_method,tol= vthr_tol, options={ 'disp': True, 'maxiter':vtrh_maxiter, 'seed': seed})
     
     minimizer_kwargs = {
     'method': vthr_method,
@@ -791,7 +791,7 @@ def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=N
     'options': {'disp': True, 'maxiter': vtrh_maxiter}}
 
     # Perform basinhopping optimization
-    fit = basinhopping(res_func, params_init, minimizer_kwargs=minimizer_kwargs, niter_success=10)
+    # fit = basinhopping(res_func, params_init, minimizer_kwargs=minimizer_kwargs, niter_success=10)
 
     print("P = ", fit['x'])
     

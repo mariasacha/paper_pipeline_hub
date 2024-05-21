@@ -1102,8 +1102,11 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
         monitors.append(monitor_Ca)
     
     #save the parameters in on file
-    if not os.path.exists(parameter_simulation['path_result']):
-        os.makedirs(parameter_simulation['path_result'])
+    if not os.path.exists(parameter_simulation['path_result']+'/parameter.json'):
+        try:
+            os.listdir(parameter_simulation['path_result'])
+        except:
+            os.makedirs(parameter_simulation['path_result'])
         f = open(parameter_simulation['path_result']+'/parameter.json',"w")
         f.write("{\n")
         for name,dic in [('parameter_simulation',parameter_simulation),
@@ -1127,7 +1130,7 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
         f.close()
     elif os.path.exists(parameter_simulation['path_result']+'/parameter.json'):
         # Prompt  input
-        response = builtins.input("This path exists already \nYou can see the data (press D), you can stop and choose another path(press N), or you can overwrite (press Y) \nWhat do you want to do? (D/N/Y): ").strip().lower()
+        response = builtins.input(f"This parameter_simulation['path_result'] : {parameter_simulation['path_result']} exists already \nYou can see the data (press D), you can stop and choose another path(press N), or you can overwrite (press Y) \nWhat do you want to do? (D/N/Y): ").strip().lower()
         
         # Check if the response is valid
         while response not in ['y', 'n']:
@@ -1247,7 +1250,7 @@ def run_simulation_all(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.0
     parameters = adjust_parameters(parameters, b_e = b_e, tau_e = tau_e, tau_i = tau_i, Iext = Iext, stimval = stimval,
                                    stimdur = stimdur,stimtime_mean = stimtime_mean ,stim_region = stim_region, n_nodes=n_nodes, 
                       cut_transient=cut_transient, run_sim=run_sim, nseed=nseed, additional_path_folder=additional_path_folder)
-    
+    print("path = ", parameters.parameter_simulation['path_result'])
     print('Initialize Simulator')
     simulator = sim_init(parameters)
     
@@ -1584,9 +1587,9 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         y_trace=[b for b in bthr if b<=np.max(bvals)]
         x_trace=[dict_b_t[b] for b in y_trace]
         if precalc:
-            x_trace = tauis[0:-14]
-            y_trace = bthr[0:-14]
-            x_ticks = 16
+            # x_trace = tauis[0:-14]
+            # y_trace = bthr[0:-14]
+            x_ticks = 6
             y_ticks = 10
         else:
             x_trace=tauis  
@@ -1610,7 +1613,7 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         mode='lines', 
         x=x_trace, 
         y=y_trace,
-        line=dict(color=line_color,width=2), showlegend=False), secondary_y=False,)
+        line=dict(color=line_color,width=4), showlegend=False), secondary_y=False,)
     
     if markers:
         fig.add_trace(go.Scatter(
