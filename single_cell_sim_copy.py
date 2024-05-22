@@ -19,6 +19,7 @@ parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synapti
 parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
 args = parser.parse_args()
 
+
 b_e = args.b_e
 Iext = args.iext
 tau_e = args.tau_e
