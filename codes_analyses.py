@@ -786,7 +786,7 @@ def load_pci_results(cond, ampstim, b_e, Iexts, tau, E_L_e, E_L_i, i_trials, n_t
     + string + str(tau)+'_trial_'+ str(i_trials)+ "_pers_stims" + '.npy'
 
     if local_folder:
-        ffolder_root = './pers_stim/Lionel/' 
+        ffolder_root = './TVB/pers_stim/Lionel/' 
         file_name = ffolder_root + 'LionelJune2020_Params_PCI_bE_' + str(b_e) + '_stim_'+ str(ampstim) \
     + string + str(tau)+'_trial_'+ str(i_trials)+ "_pers_stims" + '.npy'
 
@@ -803,7 +803,7 @@ def load_pci_results_pipeline(parameters, i_trials, n_trials, stimval=1e-3, b_e=
     local_folder: True if you want to take the lionel files from the local folder in the git repository (or also if you work from laptop)
     """
     if local_folder:
-        ffolder_root = './pers_stim/Lionel/' 
+        ffolder_root = './TVB/pers_stim/Lionel/' 
         string='_tau_e_'
         file_name = ffolder_root + f'LionelJune2020_Params_PCI_bE_{b_e}_stim_{stimval}{string}{tau_e}_trial_{i_trials}_pers_stims.npy'
         try:
@@ -847,7 +847,7 @@ def create_PCI_all(parameters, params, n_trials=5, stimvals = [1e-5, 1e-4, 1e-3]
     it creates a list with the PCI values
 
     DICT = False #True if you also want to create the dictionary for the plot with the lines and the seed
-    local_folder = True #True if you want the files from './pers_stim/Lionel/' 
+    local_folder = True #True if you want the files from './TVB/pers_stim/Lionel/' 
 
     """ 
  

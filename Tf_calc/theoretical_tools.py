@@ -364,7 +364,7 @@ def plot_curve(NAME = 'FS-RS', file_rs ='RS-cell0_CONFIG1_fit_2.npy', file_fs= '
     ficont=10;
 
     LSfe=[]
-    nuev=np.arange(0.00000001,20,step=0.1)
+    nuev=np.arange(0.00000001,10,step=0.1)
 
     nuext = 0 
     nuextin = 0.
@@ -729,7 +729,7 @@ def run_MF(CELLS, AmpStim, PRS, PFS, Iext=0, TotTime=2):
 ################################################################
 from scipy.optimize import basinhopping
 
-def make_fit_from_data_fede(DATA,cell_type, params_file, adapt_file, range_exc=None, range_inh=None,w_prec=False, **kwargs):
+def make_fit_from_data(DATA,cell_type, params_file, adapt_file, range_exc=None, range_inh=None,w_prec=False, **kwargs):
     """
     DATA                : (str) directory for the npy file containing the firing rates from the simulations
     cell                : (str) cell type to choose the correct parameters of the fit (ex: FS or RS)

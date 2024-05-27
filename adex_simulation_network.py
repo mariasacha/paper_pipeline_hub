@@ -2,44 +2,42 @@ from brian2 import *
 import matplotlib.pyplot as plt
 from functions import *
 import argparse
+import ast  
+
 # from Tf_calc.model_library import get_model
 from Tf_calc.cell_library import get_neuron_params_double_cell
 
+def parse_kwargs(kwargs_str):
+    try:
+        kwargs = ast.literal_eval(kwargs_str)
+        if not isinstance(kwargs, dict):
+            raise ValueError("Invalid dictionary format")
+        return kwargs
+    except (SyntaxError, ValueError) as e:
+        print(f"Error parsing kwargs: {e}")
+        return None
+    
 start_scope()
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
-
-parser.add_argument('--b_e', type=float, default=0.0, help='adaptation (pA)')
-parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay (ms)')
-parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay (ms)')
-parser.add_argument('--use_new', type=bool, default=False, help='use input parameters - if False: will use the ones in params file')
+parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations - do not pass single cells')
 
 parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
 parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
 parser.add_argument('--plat_dur', type=float, default=0, help='If 0 the input will be applied for the whole duration of the simulation')
-# parser.add_argument('--model', type=str, default='adex', help='model to run')
 
 parser.add_argument('--time', type=float, default=1000, help='Total Time of simulation (ms)')
 parser.add_argument('--save_path', default=None, help='save path ')
 parser.add_argument('--save_mean', default=True, help='save mean firing rate (if save_path is provided)')
 parser.add_argument('--save_all', default=False, help='save the whole simulation (if save_path is provided)')
+parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
+
 args = parser.parse_args()
 
 
-# MODEL = args.model
 CELLS = args.cells
 
-# eqs = get_model(MODEL)
 params = get_neuron_params_double_cell(CELLS)
-
-use_new = args.use_new
-
-if use_new:
-    params['b_e'] = args.b_e
-    params['tau_e'] = args.tau_e
-    params['tau_i'] = args.tau_e
-    
 
 # Extract values from params for each key
 extracted_values = {}
@@ -47,6 +45,22 @@ for key in params.keys():
     extracted_values[key] = params[key]
 # Unpack extracted values into variables
 locals().update(extracted_values)
+
+
+# Use the parameters that they are passed in kwargs
+kwargs = parse_kwargs(args.kwargs)
+if kwargs['use']: #only if use=True
+    for key in kwargs.keys():
+        if key in params.keys():
+            extracted_values[key] = kwargs[key]
+        elif key == 'use':
+            continue
+        else:
+            raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
+# Update locals
+    locals().update(extracted_values)
+
+
 
 save_path = args.save_path
 save_mean = args.save_mean
@@ -59,8 +73,6 @@ N1 = int(gei*Ntot)
 N2 = int((1-gei)*Ntot)
 
 DT=0.1 # time step
-# N1 = 2000 # number of inhibitory neurons
-# N2 = 8000 # number of excitatory neurons 
 
 #Create the kick
 AmpStim = args.input #0
@@ -83,20 +95,16 @@ duration = TotTime*ms
 C = Cm*pF
 gL = Gl*nS
 tauw = tau_w*ms
-a =0.0*nS# 4*nS
-#b = 0.08*nA
+
 I = 0.*nA
 Ee=E_e*mV
 Ei=E_i*mV
 
-# EL_i = -65.0
-# EL_e = -64.0
 
 seed(9) #9,11,25
 
 sim_name = f'_b_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_eli_{int(EL_i)}_ele_{int(EL_e)}_iext_{Iext}'
 
-# print("V_m={} , a_i={}, a_e={}, V_r={}, tau_i={}, tau_e={}, b_i={}, b_e={}, delta_i={}, delta_e={}, V_th={}, EL_i={}, EL_e={}, Vcut_i={}, Vcut_e={}".format(V_m, a_i, a_e, V_r, tau_i, tau_e, b_i, b_e, delta_i, delta_e, V_th, EL_i, EL_e,Vcut_i,Vcut_e) )
 
 print('b_e= ', b_e, 'plat=', plat)
 eqs = """
@@ -108,6 +116,7 @@ TsynI:second
 TsynE:second
 Vr:volt
 b:amp
+a:siemens
 DeltaT:volt
 Vcut:volt
 VT:volt
@@ -119,7 +128,8 @@ EL:volt
 G_inh = NeuronGroup(N1, model=eqs, threshold='vm > Vcut',refractory=5*ms,
                      reset="vm = Vr; w += b", method='heun')
 G_inh.vm = V_m * mV 
-G_inh.w = a_i*nS * (G_inh.vm - G_inh.EL)
+G_inh.a = a_i * nS 
+G_inh.w = G_inh.a * (G_inh.vm - G_inh.EL)
 G_inh.Vr = V_r * mV  
 G_inh.TsynI = tau_i * ms  
 G_inh.TsynE = tau_e * ms  
@@ -135,7 +145,8 @@ G_inh.EL = EL_i * mV
 G_exc = NeuronGroup(N2, model=eqs, threshold='vm > Vcut',refractory=5*ms,
                      reset="vm = Vr; w += b", method='heun')
 G_exc.vm = V_m*mV
-G_exc.w = a_e*nS * (G_exc.vm - G_exc.EL)
+G_exc.a = a_e * nS 
+G_exc.w = G_exc.a * (G_exc.vm - G_exc.EL)
 G_exc.Vr = V_r*mV
 G_exc.TsynI =tau_i*ms
 G_exc.TsynE =tau_e*ms
@@ -157,10 +168,10 @@ else:
 
 # connections-----------------------------------------------------------------------------
 #seed(0)
-Qi=5.0*nS
-Qe=1.5*nS
+Qi=Q_i*nS
+Qe=Q_e*nS
 
-prbC=.05 #0.05
+prbC=p_con #0.05
 
 S_12 = Synapses(G_inh, G_exc, on_pre='GsynI_post+=Qi') #'v_post -= 1.*mV')
 S_12.connect('i!=j', p=prbC)

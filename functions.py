@@ -4,8 +4,8 @@ import scipy.signal as signal
 from numba import njit
 import itertools
 import json
-import tvb_model_reference.src.nuu_tools_simulation_human as tools
-import pci_v2
+import TVB.tvb_model_reference.src.nuu_tools_simulation_human as tools
+import TVB.pci_v2 as pci_v2
 import bitarray
 import numpy.random as rgn
 import tvb.simulator.lab as lab
@@ -466,11 +466,11 @@ def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.00
     """
 
     if stimval:
-        folder_root= './result/evoked'
+        folder_root= './TVB/result/evoked'
         sim_name =  f"stim_{stimval}_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
 
     else:
-        folder_root = './result/synch'
+        folder_root = './TVB/result/synch'
         sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     
     print(sim_name)
@@ -526,7 +526,7 @@ def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, t
         each element of the list will be an array containing the variables of interest
         this array will have shape (var_int, time, n_nodes)
     '''
-    folder_root = './result/synch'
+    folder_root = './TVB/result/synch'
     sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     
     print("Loading: ", sim_name)
@@ -550,7 +550,7 @@ def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, t
         
         result = np.load(path+'/step_'+str(count)+'.npy',allow_pickle=True)
         for i in range(result.shape[0]):
-            tmp = np.array(result[i])
+            tmp = np.array(result[i], dtype='object')
             if len(tmp) != 0:
                 tmp = tmp[np.where((time_begin <= tmp[:,0]) &  (tmp[:,0]<= time_end)),:]
                 tmp_time = tmp[0][:,0]
@@ -686,7 +686,7 @@ def create_dicts(parameters,param, result, monitor, for_explan, var_select, chan
         tau_i = 5.0
 
     #Take the monitor of interest
-    folder_root = './result/synch'
+    folder_root = './TVB/result/synch'
     sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     path = folder_root + '/' + sim_name + '/' +additional_path_folder
     with open(path + '/parameter.json') as f:
@@ -833,7 +833,7 @@ def calculate_PCI(parameters, n_seeds, run_sim, cut_transient, stimval=1e-3, b_e
 
             sim_name =  f"stim_{stimval}_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{i_trials}"
 
-            folder_path = './result/evoked/' + sim_name+'/'
+            folder_path = './TVB/result/evoked/' + sim_name+'/'
 
             for i_step in range(nstep):
                 raw_curr = np.load(folder_path + 'step_'+str(i_step)+'.npy',
@@ -1550,6 +1550,13 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
 
     z_min, z_max, cscale, line_color =default_args['z_min'],default_args['z_max'], default_args['colorscale'], default_args['line_color']
     markers, mark_1, mark_2 = default_args['markers'], default_args['mark_1'], default_args['mark_2']
+    
+    x_trace=tauis  
+    y_trace=bthr
+    dict_b_t = {t:b for b,t in zip(bthr, tauis)}
+    y_trace=[b for b in bthr if b<=np.max(bvals)]
+    x_trace=[t for t in dict_b_t.keys() if dict_b_t[t] in y_trace ] 
+    x_heat = tau_v
 
     if load == 'tau_i':
         if not cscale: 
@@ -1557,51 +1564,31 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         else:
             colorscale = cscale
         # colorscale = 'jet'
-        x_heat = tau_v
+
         title_fig ='τᵢ (ms)'
-        if precalc: 
-            x_trace=tauis[17:]  
-            y_trace=bthr[17:]
+
+        if precalc:
+            # x_trace=tauis[17:]  
+            # y_trace=bthr[17:]
             x_ticks = 12
             y_ticks = 12
-            # x_trace=tauis  
-            # y_trace=bthr
-            # dict_b_t = {b:t for b,t in zip(bthr, tauis)}
-            # y_trace=[b for b in bthr if b<=np.max(bvals)]
-            # x_trace=[dict_b_t[b] for b in y_trace]
-            # x_ticks = int(len(x_trace)/4)
-            # y_ticks = int(len(y_trace)/4)  
         else:
-            x_trace=tauis  
-            y_trace=bthr
-            dict_b_t = {b:t for b,t in zip(bthr, tauis)}
-            y_trace=[b for b in bthr if b<=np.max(bvals)]
-            x_trace=[dict_b_t[b] for b in y_trace]
             x_ticks = int(len(x_trace)/4)
-            y_ticks = int(len(y_trace)/4)                
+            y_ticks = int(len(y_trace)/4)    
+
     elif load=='tau_e':
         if not cscale: 
             colorscale = 'hot'
             colorscale = [ [0, 'black'], [500/1000, 'red'],[1000/1000, 'white'],[1, 'white']]
-
         else:
             colorscale = cscale
-        x_heat = tau_v
+
         title_fig='τₑ (ms)'
-        dict_b_t = {b:t for b,t in zip(bthr, tauis)}
-        y_trace=[b for b in bthr if b<=np.max(bvals)]
-        x_trace=[dict_b_t[b] for b in y_trace]
+
         if precalc:
-            # x_trace = tauis[0:-14]
-            # y_trace = bthr[0:-14]
             x_ticks = 6
             y_ticks = 10
         else:
-            x_trace=tauis  
-            y_trace=bthr
-            # dict_b_t = {b:t for b,t in zip(bthr, tauis)}
-            y_trace=[b for b in bthr if b<=np.max(bvals)]
-            # x_trace=[dict_b_t[b] for b in y_trace]
             x_ticks = int(len(x_trace)/4)
             x_ticks=10
             y_ticks = int(len(y_trace)/4) 

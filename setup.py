@@ -14,10 +14,10 @@ from plotly.subplots import make_subplots
 import plotly.io as pio
 from functions import *
 from codes_analyses import *
-import tvb_model_reference.src.nuu_tools_simulation_human as tools
+import TVB.tvb_model_reference.src.nuu_tools_simulation_human as tools
 from Tf_calc.theoretical_tools import *
 
-from tvb_model_reference.simulation_file.parameter.parameter_M_Berlin_new import Parameter
+from TVB.tvb_model_reference.simulation_file.parameter.parameter_M_Berlin_new import Parameter
 parameters = Parameter()
 
 

@@ -15,12 +15,12 @@ parser.add_argument('--range_inh', type=get_np_linspace , default='0.1,30,60', h
 parser.add_argument('--range_exc', type=get_np_linspace , default='0.1,30,60', help='excitatory input values')
 
 parser.add_argument('--time', type=float, default=10000, help='Total Time of simulation (ms)')
-parser.add_argument('--save_path', type=str, default='./', help='path to save results')
+# parser.add_argument('--save_path', type=str, default='./', help='path to save results')
 parser.add_argument('--save_name', type=str, default='trial', help='name to save')
 args = parser.parse_args()
 
 CELLS = args.cells
-save_path = args.save_path
+# save_path = args.save_path
 save_name = args.save_name
 # eqs = get_model(MODEL)
 params = get_neuron_params_double_cell(CELLS)
@@ -222,17 +222,17 @@ for rate_exc in range_exc:
 	if i % 1 == 0:
 		print(i)
 try:
-	os.listdir(save_path + 'data/')
+	os.listdir('./Tf_calc/data/')
 except:
-	os.makedirs(save_path + 'data/')
+	os.makedirs('./Tf_calc/data/')
 #
-np.save(f'{save_path}data/ExpTF_Adapt_{Npts_e}x{Npts_i}_{save_name}.npy', Adapt)
-np.save(f'{save_path}data/ExpTF_inh_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_inh)
-np.save(f'{save_path}data/ExpTF_exc_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_exc)
-np.save(f'{save_path}data/ExpTF_muve_{Npts_e}x{Npts_i}_{save_name}.npy', muve)
-np.save(f'{save_path}data/ExpTF_muvi_{Npts_e}x{Npts_i}_{save_name}.npy', muvi)
+np.save(f'./Tf_calc/data/ExpTF_Adapt_{Npts_e}x{Npts_i}_{save_name}.npy', Adapt)
+np.save(f'./Tf_calc/data/ExpTF_inh_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_inh)
+np.save(f'./Tf_calc/data/ExpTF_exc_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_exc)
+np.save(f'./Tf_calc/data/ExpTF_muve_{Npts_e}x{Npts_i}_{save_name}.npy', muve)
+np.save(f'./Tf_calc/data/ExpTF_muvi_{Npts_e}x{Npts_i}_{save_name}.npy', muvi)
 
-np.save(f'{save_path}data/params_range_{Npts_e}x{Npts_i}_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
+np.save(f'./Tf_calc/data/params_range_{Npts_e}x{Npts_i}_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
 
 end_time = time.time()
 execution_time = end_time - start_time

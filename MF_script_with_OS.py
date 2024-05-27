@@ -162,8 +162,8 @@ T = args.T*1e-3 # time constant
 # T = 5*1e-3 # time constant
 
 #Initial Conditions
-fecont=6;
-ficont=13;
+fecont=5;
+ficont=12;
 w=fecont*bRS*twRS
 
 LSw=[]
