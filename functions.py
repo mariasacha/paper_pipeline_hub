@@ -1690,3 +1690,42 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
         pio.write_image(fig, file_path)
 
     fig.show()
+
+def load_network_mean(CELLS, path_net):
+        #load network
+    fr_inh=[]
+    fr_exc=[]
+    for file in os.listdir(path_net):
+        if file.startswith(CELLS):
+            if "inh" in file:
+                mean_fr, amp, _ = np.load(path_net+file, allow_pickle=True)
+                fr_inh.append([mean_fr, amp])
+            elif "exc" in file:
+                mean_fr, amp, _ = np.load(path_net+file, allow_pickle=True)
+                fr_exc.append([mean_fr, amp])
+    fr_exc = np.array(sorted(fr_exc, key=lambda x: x[1]))
+    fr_inh = np.array(sorted(fr_inh, key=lambda x: x[1]))
+    fr_both = np.column_stack((fr_inh[:,0], fr_exc ))
+    
+    inputs = fr_both[:,-1]
+
+    return fr_both, inputs
+
+def calculate_mf_difference(CELLS, fr_both, inputs, PRS, PFS):
+    mean_both =[]
+    for AmpStim in inputs:
+        mean_exc, mean_inh = run_MF(CELLS, AmpStim, PRS, PFS, Iext=0, TotTime=2)
+        mean_both.append([mean_inh, mean_exc, AmpStim])
+
+    dif_arr = np.abs(fr_both - np.array(mean_both))
+
+    if dif_arr[:,-1].any() !=0:
+        raise Exception("difference of inputs should be 0 but it is not")
+
+    print("Whole difference: ", dif_arr)
+    print("mean difference exc: ", np.mean(dif_arr[:,1]))
+    print("mean difference inh: ", np.mean(dif_arr[:,0]))
+    
+    dif = np.mean(dif_arr[:,:2])
+
+    return dif 

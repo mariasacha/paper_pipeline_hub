@@ -76,12 +76,13 @@ parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
 parser.add_argument('--iext', type=float, default=0.3, help='external input - in Hz')
 parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
 parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
+parser.add_argument('--T', type=float, default=20.0, help='time constant - in ms')
 parser.add_argument('--use_new', type=bool, default=True, help='use input parameters - if False: will use the ones in params file')
 
 parser.add_argument('--time', type=float, default=10, help='Total Time of simulation - in s')
 
-parser.add_argument('--file_fs',  default='FS-cell_CONFIG1_fit_2.npy', help='fit for fs')
-parser.add_argument('--file_rs',  default='RS-cell0_CONFIG1_fit_2.npy', help='fit for rs')
+parser.add_argument('--file_fs',  default='FS-cell_CONFIG1_fit.npy', help='fit for fs')
+parser.add_argument('--file_rs',  default='RS-cell0_CONFIG1_fit.npy', help='fit for rs')
 
 parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
 
@@ -157,7 +158,8 @@ Ti=p['tau_i']; #inhibitory synaptic decay
 
 Ele =p['EL_e'] #leak reversal (exc)
 Eli = p['EL_i'] #leak reversal (inh)
-T = 20*1e-3 # time constant
+T = args.T*1e-3 # time constant
+# T = 5*1e-3 # time constant
 
 #Initial Conditions
 fecont=6;
