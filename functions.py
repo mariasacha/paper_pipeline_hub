@@ -1,218 +1,93 @@
 from brian2 import *
-import os
+
 import scipy.signal as signal
 from numba import njit
-import itertools
-import json
+
+import tvb.simulator.lab as lab
 import TVB.tvb_model_reference.src.nuu_tools_simulation_human as tools
 import TVB.pci_v2 as pci_v2
-import bitarray
+
+import numpy as np
 import numpy.random as rgn
-import tvb.simulator.lab as lab
+import itertools
+import json
+import os
+
 from IPython.display import clear_output
 import builtins 
 from scipy.signal import butter, sosfilt
 from scipy.stats import zscore
-import numpy as np
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+import scikit_posthocs as sp
+import ptitprince as pt
+import matplotlib.colors as mplcol
+
 
 # prepare firing rate
 def bin_array(array, BIN, time_array):
+    """
+    Bins an array into equally spaced bins and calculates the mean value in each bin.
+
+    Parameters:
+    - array (ndarray): The array to be binned.
+    - BIN (float): The width of each bin in the same units as the time array.
+    - time_array (ndarray): The time array corresponding to the array.
+
+    Returns:
+    - ndarray: An array containing the mean value in each bin.
+    """
+        
     N0 = int(BIN/(time_array[1]-time_array[0]))
     N1 = int((time_array[-1]-time_array[0])/BIN)
     return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 
 def heaviside(x):
+    """
+    Heaviside step function.
+
+    Parameters:
+    - x (ndarray): Input array.
+
+    Returns:
+    - ndarray: Output array with the same shape as input x.
+    """
     return 0.5 * (1 + np.sign(x))
    
    
 def input_rate(t, t1_exc, tau1_exc, tau2_exc, ampl_exc, plateau):
-    # t1_exc=10. # time of the maximum of external stimulation
-    # tau1_exc=20. # first time constant of perturbation = rising time
-    # tau2_exc=50. # decaying time
-    # ampl_exc=20. # amplitude of excitation
+    """
+    Calculates the input rate based on specified parameters.
+
+    Parameters:
+    - t (ndarray): Time array.
+    - t1_exc (float): Time of the maximum of external stimulation.
+    - tau1_exc (float): First time constant of perturbation (rising time).
+    - tau2_exc (float): Decaying time.
+    - ampl_exc (float): Amplitude of excitation.
+    - plateau (float): Duration of the plateau.
+
+    Returns:
+    - ndarray: Array containing the input rate values corresponding to each time point.
+    """
     inp = ampl_exc * (np.exp(-(t - t1_exc) ** 2 / (2. * tau1_exc ** 2)) * heaviside(-(t - t1_exc)) + \
         heaviside(-(t - (t1_exc+plateau))) * heaviside(t - (t1_exc))+ \
         np.exp(-(t - (t1_exc+plateau)) ** 2 / (2. * tau2_exc ** 2)) * heaviside(t - (t1_exc+plateau)))
     return inp
 
-def detect_UP(train_cut, ratioThreshold=0.4,
-              sampling_rate=1., len_state=50.,
-              gauss_width_ratio=10., min_for_up=0.2):
-    """
-    detect UP states from time signal
-    (population rate or population spikes or cell voltage trace)
-    return start and ends of states.
-
-    Written by Trang-Anh Nghiem. Modified with min_for_up by David Aquilue
-
-    Parameters
-    ----------
-    train_cut: array
-        array of shape (N, ) containing the time trace on which we detect upstates
-
-    ratioThreshold: float
-        Over which % of the FR maximum value in the time trace of a region we consider an up-state
-
-    sampling_rate: float
-        Sampling rate of the time trace. Usually 1 / dt. In ms**(-1)
-
-    len_state: float
-        Minimum length (in ms) of time over threshold to be considered up-state (I think)
-
-    gauss_width_ratio: float
-        Width ratio of the Gaussian Kernel used in the filter for detecting up-states.
-
-    min_for_up: float
-        A value under which there is no up-state. That way, if we have high relative variations
-        near 0 value but the FR is not higher than 0.3 there will be no up-state.
-        However, take into account that this will modify the functioning of the algorithm, possibly
-        underestimating up state duration.
-
-    Returns
-    -------
-    idx: array
-        indexes where there is a change of state.
-    train_shift: array
-        time trace of the filtered signal - ratioThreshold * np.max(train_filtered)
-    train_bool: array
-        array containing 1s when up state and 0s when downstate
-    """
-    # convolve with Gaussian
-    time = range(len(train_cut))  # indexes
-    gauss_width = gauss_width_ratio * sampling_rate
-
-    # We obtain a gauss filter
-    gauss_filter = np.exp(-0.5 * ((np.subtract(time, len(train_cut) / 2.0) / gauss_width) ** 2))
-    gauss_norm = np.sqrt(2 * np.pi * gauss_width ** 2)
-    gauss_filter = gauss_filter / gauss_norm
-
-    # We filter the signal by convolving the gauss_filter
-    train_filtered = signal.fftconvolve(train_cut, gauss_filter)
-    train_filt = train_filtered[int(len(train_cut) / 2.0): \
-                                int(3 * len(train_cut) / 2.0)]
-    thresh = ratioThreshold * np.max(train_filt)
-
-    # times at which filtered signal crosses threshold
-    train_shift = np.subtract(train_filt, thresh) - min_for_up
-    idx = np.where(np.multiply(train_shift[1:], train_shift[:-1]) < 0)[0]
-
-    # train of 0 in DOWN state and 1 in UP state
-    train_bool = np.zeros(len(train_shift))
-    train_bool[train_shift > 0] = 1  # assign to 1 in UP states
-
-    # cut states shorter than min length
-    idx = np.concatenate(([0], idx, [len(train_filt)]))
-    diff_remove = np.where(np.diff(idx) < len_state * sampling_rate)[0]
-    idx_start_remove = idx[diff_remove]
-    idx_end_remove = idx[np.add(diff_remove, 1)] + 1
-
-    for ii_start, ii_end in zip(idx_start_remove, idx_end_remove):
-        train_bool[ii_start:ii_end] = np.ones_like(train_bool[ii_start:ii_end]) * train_bool[ii_start - 1]
-        # assign to same state as previous long
-
-    idx = np.where(np.diff(train_bool) != 0)[0]
-    idx = np.concatenate(([0], idx, [len(train_filt)])) / sampling_rate
-    return idx, train_shift, train_bool
-
 
 @njit
-def obtain_updown_durs(train_bool, dt):
-    N = train_bool.size
-    up_durs = np.empty(0)  # Something of the like up_durs = []
-    down_durs = np.empty(0)
-    current_up_duration = 0
-    current_down_duration = 0
-    for k in range(1, N):  # We sweep over all the values of the train_bool signal
-        if train_bool[k - 1] == train_bool[k]:  # If 2 consecutive equal values -> increase state duration
-            if train_bool[k - 1] == 1:
-                current_up_duration += dt
-            else:
-                current_down_duration += dt
-        else:  # If 2 consecutive NOT equal values -> increase state duration + store duration + restore
-            if train_bool[k - 1] == 1:
-                up_durs = np.append(up_durs, current_up_duration)
-                current_up_duration = 0
-            else:
-                down_durs = np.append(down_durs, current_down_duration)
-                current_down_duration = 0
-        if k == N - 1:  # Regardless of the value of the last time point, we have to store the last duration.
-            if train_bool[k] == 1:
-                current_up_duration += dt
-                up_durs = np.append(up_durs, current_up_duration)
-                current_up_duration = 0
-            else:
-                current_down_duration += dt
-                down_durs = np.append(down_durs, current_down_duration)
-                current_down_duration = 0
 
-    if up_durs.size == 0:  # If no up-states, return duration of 0
-        mean_up_durs = 0
-        total_up_durs = 0
-    else:
-        mean_up_durs = np.mean(up_durs)
-        total_up_durs = np.sum(up_durs)
-
-    if down_durs.size == 0:  # If no down-states, return duration of 0
-        mean_down_durs = 0
-        total_down_durs = 0
-    else:
-        mean_down_durs = np.mean(down_durs)
-        total_down_durs = np.sum(down_durs)
-
-    return mean_up_durs, mean_down_durs, total_up_durs, total_down_durs
-
-# ----- Raster plot + mean adaptation ------
-def plot_raster_meanFR_tau_i(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, sim_name,  b_e, tau_e, tau_i, EL_i, EL_e, Iext, path):
-    fig=figure(figsize=(8,12))
-    ax1=fig.add_subplot(211)
-    ax3=fig.add_subplot(212)
-    ax2 = ax3.twinx()
-
-
-    ax1.plot(RasG_inh[0], RasG_inh[1], ',r')
-    ax1.plot(RasG_exc[0], RasG_exc[1], ',g')
-
-    ax1.set_xlabel('Time (ms)')
-    ax1.set_ylabel('Neuron index')
-
-    ax3.plot(TimBinned/1000,popRateG_inh, 'r')
-    ax3.plot(TimBinned/1000,popRateG_exc, 'SteelBlue')
-    if AmpStim>0:
-        ax3.plot(TimBinned/1000, test_input[t_st:], 'green' , label="input")
-    ax2.plot(TimBinned/1000,(Pu/8000), 'orange')
-    ax2.set_ylabel('mean w (pA)')
-    #ax2.set_ylim(0.0, 0.045)
-    ax3.set_xlabel('Time (s)')
-    ax3.set_ylabel('population Firing Rate')
-
-    fig.suptitle(f'b_e={b_e}, tau_e={tau_e}, tau_i={tau_i}, EL_i = {EL_i}, EL_e = {EL_e}, Iext = {Iext}')
-
-    #/DATA/Maria/Anesthetics/network_sims/big_loop_tau_i/figures/eli_-64.0_ele_-63.0/Iext_0.4/ +sim_name
-    fol_name = path + "figures/" + f"eli_{int(EL_i)}_ele_{int(EL_e)}/Iext_{Iext}/"
-
-    try:
-        os.listdir(fol_name)
-    except:
-        os.makedirs(fol_name)
-
-    fig.savefig(fol_name + sim_name + '.png')
-
-    plt.show()
-
-    #
-    # fig.savefig(fol_name + sim_name + '_raster_plot_mean_w' + '.png')
-    # plt.close()
 
 def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin):
     
-    # fig=figure(figsize=(8,12))
     ax1 = axes[0]
     ax3 = axes[1]
-    # ax1=fig.add_subplot(211)
-    # ax3=fig.add_subplot(212)
     ax2 = ax3.twinx()
 
     ax1.plot(RasG_inh[0], RasG_inh[1], ',r')
@@ -227,7 +102,6 @@ def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc,
         ax3.plot(TimBinned/1000,input_bin, 'green', label='input')
     ax2.plot(TimBinned/1000,(Pu/8000), 'orange', label='W')
     ax2.set_ylabel('mean w (pA)')
-    #ax2.set_ylim(0.0, 0.045)
     ax3.set_xlabel('Time (s)')
     ax3.set_ylabel('population Firing Rate')
 
@@ -238,19 +112,9 @@ def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc,
     ax1.set_title(sim_name)
     plt.show()
 
-def bin_array(array, BIN, time_array):
-    N0 = int(BIN/(time_array[1]-time_array[0]))
-    N1 = int((time_array[-1]-time_array[0])/BIN)
-    return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
-#---------------------------------------------------------------------#
-# prepare firing rate
+
 def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5):
-    def bin_array(array, BIN, time_array):
-        N0 = int(BIN/(time_array[1]-time_array[0]))
-        N1 = int((time_array[-1]-time_array[0])/BIN)
-        return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
-    
-    
+
     time_array = arange(int(TotTime/DT))*DT
 
     LfrG_exc = array(FRG_exc.rate/Hz)
@@ -263,102 +127,6 @@ def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5):
 
 
     return TimBinned, popRateG_exc, popRateG_inh, Pu
-
-def create_simname_tau_i(b_e, tau_i, Iext, EL_i, EL_e):
-    # _b_0_tau_i_5.0_Iext_0.4_eli_-64_ele_-63
-    b_e = int(b_e)
-    EL_i = int(EL_i)
-    EL_e = int(EL_e)
-
-    sim_name = f'_b_{b_e}_tau_i_{tau_i}_Iext_{Iext}_eli_{EL_i}_ele_{EL_e}'
-
-    return sim_name
-
-def create_simname_both_taus(b_e, tau_e, tau_i, Iext, EL_i, EL_e):
-    # _b_0_tau_i_5.0_Iext_0.4_eli_-64_ele_-63
-    b_e = int(b_e)
-    EL_i = int(EL_i)
-    EL_e = int(EL_e)
-
-
-    sim_name = f'_b_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_eli_{EL_i}_ele_{EL_e}'
-
-    return sim_name
-
-
-def create_simname_tau_e(b_e, tau_e, Iext, EL_i, EL_e):
-
-    b_e = int(b_e*1e+12)
-    tau_e = round(tau_e * 1e+3, 1)
-    EL_i = int(EL_i * 1e+3)
-    EL_e = int(EL_e * 1e+3)
-
-    sim_name = f'_b_{b_e}_tau_e_{tau_e}_Iext_{Iext}_eli_{EL_i}_ele_{EL_e}'
-
-    return sim_name
-
-def create_folder(b_e, tau_e, Iext, EL_i, EL_e, folder_root):
-
-
-    sim_name = f'_b_{b_e}_tau_e_{tau_e}_Iext_{Iext}_eli_{EL_i}_ele_{EL_e}'
-
-    subfolder = folder_root + '/' + f"eli_{EL_i}_ele_{EL_e}" + '/'
-
-    try:
-        os.listdir(subfolder)
-    except:
-        os.mkdir(subfolder)
-
-    subsubfolder = subfolder + '/' + f"Iext_{Iext}" + '/'
-
-    try:
-        os.listdir(subsubfolder)
-    except:
-        os.mkdir(subsubfolder)
-
-    folder_name = subsubfolder + sim_name + '/'
-    print(folder_name)
-
-    try:
-        os.listdir(folder_name)
-        #print("path existing:" + folder_name)
-    except:
-        os.mkdir(folder_name)
-        print("path created:" + folder_name)
-
-    return folder_name, sim_name
-
-def create_folder_2(b_e, tau_e, Iext, EL_i, EL_e, folder_root ):
-
-
-    sim_name = f'_b_{b_e}_tau_e_{tau_e}_Iext_{Iext}_eli_{EL_i}_ele_{EL_e}'
-    print(sim_name)
-
-    subfolder = folder_root + '\\' + f"eli_{EL_i}_ele_{EL_e}" + '\\'
-
-    try:
-        os.listdir(subfolder)
-    except:
-        os.mkdir(subfolder)
-
-    subsubfolder = subfolder + '\\' + f"Iext_{Iext}" + '\\'
-
-    try:
-        os.listdir(subsubfolder)
-    except:
-        os.mkdir(subsubfolder)
-
-    folder_name = subsubfolder + sim_name + '\\'
-    print(folder_name)
-
-    try:
-        os.listdir(folder_name)
-        #print("path existing:" + folder_name)
-    except:
-        os.mkdir(folder_name)
-        print("path created:" + folder_name)
-
-    return folder_name, sim_name
 
 
 def create_combination(bvals, tau_es, EL_es, EL_is, Iexts, neglect_silence = True):
@@ -382,7 +150,6 @@ def create_combination(bvals, tau_es, EL_es, EL_is, Iexts, neglect_silence = Tru
         combinaison = combinaison[idx_not, :]
     return combinaison
 
-
 def create_combination_neglect_only(bvals, tau_es, EL_es, EL_is, Iexts, neglect=True):
     # create the combination with the values that were neglected
     lst = [bvals, tau_es, EL_es, EL_is, Iexts]
@@ -405,17 +172,6 @@ def create_combination_neglect_only(bvals, tau_es, EL_es, EL_is, Iexts, neglect=
         combinaison = combinaison[idx_not, :]
     return combinaison
 
-def create_combination_iext04(bvals, tau, EL_es, EL_is, Iexts):
-
-    lst = [bvals, tau, EL_es, EL_is, Iexts]
-
-    combinaison = np.array(list(itertools.product(*lst)))
-
-    # we want the neglect on the Ele and Eli
-    idx_keep = combinaison[:, 3] <= combinaison[:, 2]  # We keep E_L_e > E_L_i - thresh_silence
-    combinaison = combinaison[idx_keep, :]  # And eliminate those combinations that are not needed.
-
-    return combinaison
 
 def calculate_psd_fmax(popRateG_exc, popRateG_inh, TimBinned):
     time_s = TimBinned * 0.001  # time has to be in seconds and here it is in ms
@@ -715,6 +471,9 @@ def create_dicts(parameters,param, result, monitor, for_explan, var_select, chan
 
     for var in var_select:
         result_fin[var] = result[list_vars[var]]
+        if monitor == 'Bold': #Z score if it is bold
+            if var == 'E' or var == 'I':
+                result_fin[var] = zscore(result[list_vars[var]])
 
     if return_TR:
         TR= parameter_monitor["parameter_Bold"]["period"]
@@ -936,9 +695,9 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
     rgn.seed(parameter_simulation['seed'])
 
     if parameter_model['matteo']:
-        import tvb_model_reference.src.Zerlaut_matteo as model
+        import TVB.tvb_model_reference.src.Zerlaut_matteo as model
     else:
-        import tvb_model_reference.src.Zerlaut as model
+        import TVB.tvb_model_reference.src.Zerlaut as model
 
     ## Model
     if parameter_model['order'] == 1:
@@ -1464,9 +1223,9 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 
                 sim_name = f"b_{b_ad}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
                 name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
-                name_exc = save_path  + sim_name + '_exc.npy'
-                name_inh = save_path + sim_name + '_inh.npy'
-
+                # name_exc = save_path  + sim_name + '_exc.npy'
+                # name_inh = save_path + sim_name + '_inh.npy'
+            
                 #Using the exc FR but can use the inh instead
                 try:
                     popRateG_exc = np.load(name_exc)[:load_until]
@@ -1474,18 +1233,18 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
                     try:
                         sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{float(nseed)}"
                         name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
-                        name_exc = save_path + sim_name + '_exc.npy'
+                        # name_exc = save_path + sim_name + '_exc.npy'
                         popRateG_exc = np.load(name_exc)[:load_until]
                     except FileNotFoundError:
                         try:
                             sim_name = f"b_{float(b_ad)}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
                             name_exc = save_path + '/network_sims/' + sim_name + '_exc.npy'
-                            name_exc = save_path + sim_name + '_exc.npy'
+                            # name_exc = save_path + sim_name + '_exc.npy'
                             popRateG_exc = np.load(name_exc)[:load_until]
                         except FileNotFoundError:
                             sim_name = f"b_{int(b_ad)}_tau_i_{int(tau_I)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{int(nseed)}"
                             name_exc = save_path + '/network_sims/' + sim_name + '_exc_vol2.npy'
-                            name_exc = save_path + sim_name + '_exc_vol2.npy'
+                            # name_exc = save_path + sim_name + '_exc_vol2.npy'
                             popRateG_exc = np.load(name_exc)[:load_until]                            
 
                 # popRateG_inh = np.load(path + name_inh)[:load_until]
@@ -1516,28 +1275,28 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
 def load_survival( load = 'tau_e', precalc=False, save_path = './'):
     if precalc:
         if load == 'tau_e':
-            mean_array = np.load('./dynamical_precalc/tau_e_mean_array.npy')
-            taus =  list(np.load('./dynamical_precalc/' + f'b_thresh_tau_e.npy')[:,0])
-            bthr = list(np.load('./dynamical_precalc/'+ f'b_thresh_tau_e.npy')[:,-1])
+            mean_array = np.load('./Dyn_Analysis/dynamical_precalc/tau_e_mean_array.npy')
+            taus =  list(np.load('./Dyn_Analysis/dynamical_precalc/' + f'b_thresh_tau_e.npy')[:,0])
+            bthr = list(np.load('./Dyn_Analysis/dynamical_precalc/'+ f'b_thresh_tau_e.npy')[:,-1])
 
-            tau_v = np.load('./dynamical_precalc/' + f'tau_e_heatmap_taus.npy')
-            bvals =np.load('./dynamical_precalc/' + f'tau_e_heatmap_bvals.npy')
+            tau_v = np.load('./Dyn_Analysis/dynamical_precalc/' + f'tau_e_heatmap_taus.npy')
+            bvals =np.load('./Dyn_Analysis/dynamical_precalc/' + f'tau_e_heatmap_bvals.npy')
         elif load == 'tau_i':
-            mean_array = np.load('./dynamical_precalc/mean_array_tau_i.npy')
-            taus = list(np.load('./dynamical_precalc/tauis_bcrit.npy'))
-            bthr = list(np.load('./dynamical_precalc/bthr_tauis_bcrit.npy'))
+            mean_array = np.load('./Dyn_Analysis/dynamical_precalc/mean_array_tau_i.npy')
+            taus = list(np.load('./Dyn_Analysis/dynamical_precalc/tauis_bcrit.npy'))
+            bthr = list(np.load('./Dyn_Analysis/dynamical_precalc/bthr_tauis_bcrit.npy'))
 
             bvals = np.arange(0,25,1)
             tau_v = np.arange(3.,9.,0.1)
     else:
-        mean_array = np.load(save_path + f'{load}_mean_array.npy')
-        bthr = list(np.load(save_path + f'b_thresh_{load}.npy')[:,-1])
-        tau_v = np.load(save_path + f'{load}_heatmap_taus.npy')
-        bvals = np.load(save_path + f'{load}_heatmap_bvals.npy')
+        mean_array = np.load('./Dyn_Analysis/' + save_path + f'{load}_mean_array.npy')
+        bthr = list(np.load('./Dyn_Analysis/' + save_path + f'b_thresh_{load}.npy')[:,-1])
+        tau_v = np.load('./Dyn_Analysis/' + save_path + f'{load}_heatmap_taus.npy')
+        bvals = np.load('./Dyn_Analysis/' + save_path + f'{load}_heatmap_bvals.npy')
         if load == 'tau_e':
-            taus = list(np.load(save_path + f'b_thresh_{load}.npy')[:,0])
+            taus = list(np.load('./Dyn_Analysis/' + save_path + f'b_thresh_{load}.npy')[:,0])
         if load == 'tau_i':
-            taus = list(np.load(save_path + f'b_thresh_{load}.npy')[:,1])
+            taus = list(np.load('./Dyn_Analysis/' + save_path + f'b_thresh_{load}.npy')[:,1])
             taus = [i for i in taus if i <= tau_v.max()]
     return mean_array,taus, bthr, tau_v, bvals
 
@@ -1716,3 +1475,558 @@ def calculate_mf_difference(CELLS, fr_both, inputs, PRS, PFS):
     dif = np.mean(dif_arr[:,:2])
 
     return dif 
+
+def box_and_whisker(data, palette,medianprops,meanpprops, axes, COLOR= None, widths = 0.6, ANNOT=False):
+    """
+    This is for the normal boxplot:
+    data: list of PCI values - usually for one stimulus and multiple conditions
+    meadian and mean props for the boxplots : dictionaries
+    COLOR: if given (string) all the boxes will have this color
+    ANNOT: if True the sample size will be displayed
+    """
+
+    bp = axes.boxplot(data, widths=widths, medianprops=medianprops,
+                      meanprops=meanpprops,showmeans=True, meanline=False,patch_artist=True)
+    
+    # Change the colour of the boxes to Seaborn's 'pastel' palette
+    if COLOR:
+        
+        for patch in bp['boxes']:
+            patch.set_facecolor(COLOR)
+    else:
+        colors = sns.color_palette(palette)
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+
+    # Colour of the median lines
+#     plt.setp(bp['medians'], color='k')
+    
+    
+    Post_hoc = sp.posthoc_conover(data, p_adjust='holm')
+    
+#     # Get the shape of the Post_hoc results (assuming it's a square matrix)
+    num_groups = len(Post_hoc)
+
+    # Check for statistical significance
+    significant_combinations = []
+    # Check from the outside pairs of boxes inwards
+    ls = list(range(1, len(data) + 1))
+    combinations = [(ls[x], ls[x + y]) for y in reversed(ls) for x in range((len(ls) - y))]
+    for c in combinations:
+        data1 = c[0] - 1
+        data2 = c[1] - 1
+        p_value = Post_hoc.iloc[data1, data2]
+        # Significance
+#         U, p = stats.mannwhitneyu(data1, data2, alternative='two-sided')
+        if p_value < 0.05:
+            significant_combinations.append([c, p_value])
+
+    # Get info about y-axis
+    bottom, top = axes.get_ylim()
+    yrange = top - bottom
+
+    # Significance bars
+    for i, significant_combination in enumerate(significant_combinations):
+        # Columns corresponding to the datasets of interest
+        x1 = significant_combination[0][0]
+        x2 = significant_combination[0][1]
+        # What level is this bar among the bars above the plot?
+        level = len(significant_combinations) - i
+        # Plot the bar
+        bar_height = (yrange * 0.08 * level) + top
+        bar_tips = bar_height - (yrange * 0.02)
+        axes.plot(
+            [x1, x1, x2, x2],
+            [bar_tips, bar_height, bar_height, bar_tips], lw=1, c='k')
+        # Significance level
+        p = significant_combination[1]
+        if p < 0.001:
+            sig_symbol = '***'
+        elif p < 0.01:
+            sig_symbol = '**'
+        elif p < 0.05:
+            sig_symbol = '*'
+        text_height = bar_height + (yrange * 0.01)
+        axes.text((x1 + x2) * 0.5, text_height, sig_symbol, ha='center', c='k')
+
+    # Adjust y-axis
+    bottom, top = axes.get_ylim()
+    yrange = top - bottom
+    axes.set_ylim(bottom - 0.02 * yrange, top)
+
+    # Annotate sample size below each box
+    if ANNOT:
+        for i, dataset in enumerate(data):
+            sample_size = len(dataset)
+            axes.text(i + 1, bottom, fr'n = {sample_size}', ha='center', size='small')
+
+def custom_sort(item):
+    """
+    Sort according to absolute difference
+    Used in stats_rain so that the longer stat bars will be higher 
+    """
+    return abs(item[0][0] - item[0][1])
+
+def stats_rain(df, ax, val_col='PCI', group_col='cond'):
+    """
+    Adds statistical annotation in the boxplot of the raincloud plot
+    It runs post hoc conover tests
+
+    df : the dataset, make sure that it refers to one stim 
+    val_col : the column with the values to be analysed (PCI)
+    group_col : for which conditions (cond)
+    """
+
+    Post_hoc = sp.posthoc_conover(df, val_col=val_col, group_col=group_col, p_adjust='holm')
+    num_groups = len(Post_hoc)
+
+    # Check for statistical significance
+    significant_combinations = []
+    # Check from the outside pairs of boxes inwards
+    ls = list(range(1, len(pd.unique(df[group_col])) + 1))
+    combinations = [(ls[x], ls[x + y]) for y in reversed(ls) for x in range((len(ls) - y))]
+    for c in combinations:
+        data1 = c[0] - 1
+        data2 = c[1] - 1
+        p_value = Post_hoc.iloc[data1, data2]
+        # Significance
+    #         U, p = stats.mannwhitneyu(data1, data2, alternative='two-sided')
+        if p_value < 0.05:
+            significant_combinations.append([c, p_value])
+
+    # The df is not ordered in the same way as the boxplots, so we create a dictionary
+    # Maybe this needs adjustments 
+    dict_post_corr = {'wake':0, 'nmda':1, 'gaba':2, 'sleep':3} # the way boxplots are plotted
+    dict_wrong = {index+1:elem  for index, elem in enumerate(list(Post_hoc.columns))} #how the df is ordered
+    
+    #Replace df ordering in the combinations with the desired ones
+    new_combs = []
+    for comb in significant_combinations:
+        tup = comb[0]
+        new_tup = [dict_post_corr[dict_wrong[i]] for i in tup]
+        new_tup = sorted(new_tup)
+        new_combs.append([new_tup, comb[1]])
+    
+    # Sort according to distance between the boxes
+    new_combs = sorted(new_combs, key=custom_sort, reverse=True)
+
+    # Get info about y-axis
+    bottom, top = ax.get_ylim()
+    yrange = top - bottom
+
+    boxes = ax.get_lines() 
+    wanted_lines = []
+    # Get the coordinates of the boxes
+    for box in boxes:
+        x1 = box.get_xdata()
+        if x1[0] == x1[1]: # Only the ones that the x coincides - they are the whiskers in the boxplots
+            if not any(np.array_equal(x1, arr) for arr in wanted_lines): #do not save doubles
+                wanted_lines.append(x1)
+
+    # That was to check in what order they are plotted the boxes    
+    # colors = ['red', 'blue', 'green', 'yellow']
+    # i= 0
+    # for x2 in wanted_lines:
+    #     print(x2)
+    #     ax.axvline(x2[0], color=colors[i])
+    #     i +=1
+
+
+    # Significance bars
+    for i, new_comb in enumerate(new_combs): #new_comb = [[x1, x2], p]
+        # Columns corresponding to the datasets of interest
+        x1 = float(wanted_lines[new_comb[0][0]][0])
+        x2 = float(wanted_lines[new_comb[0][1]][0])
+        
+        # What level is this bar among the bars above the plot?
+        level = len(new_combs) - i
+        # Plot the bar
+        bar_height = (yrange * 0.08 * level) + top
+        bar_tips = bar_height - (yrange * 0.02)
+        ax.plot(
+            [x1, x1, x2, x2],
+            [bar_tips, bar_height, bar_height, bar_tips], lw=1, c='k')
+        # Significance level
+        p = new_comb[1]
+        if p < 0.001:
+            sig_symbol = '***'
+        elif p < 0.01:
+            sig_symbol = '**'
+        elif p < 0.05:
+            sig_symbol = '*'
+        text_height = bar_height + (yrange * 0.01)
+        ax.text((x1 + x2) * 0.5, text_height, sig_symbol, ha='center', c='k')
+        
+    # Adjust y-axis
+    bottom, top = ax.get_ylim()
+    yrange = top - bottom
+    ax.set_ylim(bottom - 0.02 * yrange, top)
+
+    return ax
+
+def box_and_whisker_2(data, PCI_all,color_box, axes, zorder=100, widths = 0.08, ANNOT=False):
+    """
+    This is for the plot with the seeds with the lines:
+    data: the df columns of the conditions with the pci values
+    PCI_all : the list with the pci values (for the calculation of the statistics
+            it is better to use for one stimulus)
+    color_box: color of the box plots
+    z_order : order that the boxes will be plotted, put a high value to be on top of the lines
+    ANNOT: if True the sample size will be displayed
+    """
+
+    snsFig = sns.boxplot(data, showfliers=False, whis=0, \
+        width=widths, ax=ax, medianprops={"color": color_box})
+    for i,box in enumerate([p for p in snsFig.patches if not p.get_label()]): 
+        # color = box.get_facecolor()
+        box.set_edgecolor(color_box)
+        box.set_facecolor((0, 0, 0, 0))
+        box.set_zorder(zorder)
+
+    
+    Post_hoc = sp.posthoc_conover(PCI_all, p_adjust='holm')
+    
+#     # Get the shape of the Post_hoc results (assuming it's a square matrix)
+    num_groups = len(Post_hoc)
+
+    # Check for statistical significance
+    significant_combinations = []
+    # Check from the outside pairs of boxes inwards
+    ls = list(range(1, len(PCI_all) + 1))
+    combinations = [(ls[x], ls[x + y]) for y in reversed(ls) for x in range((len(ls) - y))]
+    for c in combinations:
+        data1 = c[0] - 1
+        data2 = c[1] - 1
+        p_value = Post_hoc.iloc[data1, data2]
+        # Significance
+#         U, p = stats.mannwhitneyu(data1, data2, alternative='two-sided')
+        if p_value < 0.05:
+            significant_combinations.append([c, p_value])
+
+    # Get info about y-axis
+    bottom, top = axes.get_ylim()
+    yrange = top - bottom
+
+    # Significance bars
+    for i, significant_combination in enumerate(significant_combinations):
+        # Columns corresponding to the datasets of interest
+        x1 = significant_combination[0][0]-1
+        x2 = significant_combination[0][1]-1
+        # What level is this bar among the bars above the plot?
+        level = len(significant_combinations) - i
+        # Plot the bar
+        bar_height = (yrange * 0.08 * level) + top
+        bar_tips = bar_height - (yrange * 0.02)
+        axes.plot(
+            [x1, x1, x2, x2],
+            [bar_tips, bar_height, bar_height, bar_tips], lw=1, c='k')
+        # Significance level
+        p = significant_combination[1]
+        if p < 0.001:
+            sig_symbol = '***'
+        elif p < 0.01:
+            sig_symbol = '**'
+        elif p < 0.05:
+            sig_symbol = '*'
+        text_height = bar_height + (yrange * 0.01)
+        axes.text((x1 + x2) * 0.5, text_height, sig_symbol, ha='center', c='k')
+
+    # Adjust y-axis
+    bottom, top = axes.get_ylim()
+    yrange = top - bottom
+    axes.set_ylim(bottom - 0.02 * yrange, top)
+
+    # Annotate sample size below each box
+    if ANNOT:
+        for i, dataset in enumerate(data):
+            sample_size = len(dataset)
+            axes.text(i + 1, bottom, fr'n = {sample_size}', ha='center', size='small')
+
+def violin_and_whisker(data, palette,medianprops,meanpprops, axes, COLOR= None, widths = 0.6, ANNOT=False):
+
+#     ax = plt.axes()
+#     bp = axes.violinplot(data, widths=widths,showmeans=True)
+    
+    bp= sns.violinplot(data = data, width = widths, saturation = 0.5, 
+                           color = COLOR, alpha = 0.06, ax=axes)
+    
+    
+    Post_hoc = sp.posthoc_conover(data, p_adjust='holm')
+    
+#     # Get the shape of the Post_hoc results (assuming it's a square matrix)
+    num_groups = len(Post_hoc)
+
+    # Check for statistical significance
+    significant_combinations = []
+    # Check from the outside pairs of boxes inwards
+    ls = list(range(1, len(data) + 1))
+    combinations = [(ls[x], ls[x + y]) for y in reversed(ls) for x in range((len(ls) - y))]
+    for c in combinations:
+        data1 = c[0] - 1
+        data2 = c[1] - 1
+        p_value = Post_hoc.iloc[data1, data2]
+        # Significance
+#         U, p = stats.mannwhitneyu(data1, data2, alternative='two-sided')
+        if p_value < 0.05:
+            significant_combinations.append([c, p_value])
+
+    # Get info about y-axis
+    bottom, top = axes.get_ylim()
+    yrange = top - bottom
+
+    # Significance bars
+    for i, significant_combination in enumerate(significant_combinations):
+        # Columns corresponding to the datasets of interest
+        x1 = significant_combination[0][0]-1
+        x2 = significant_combination[0][1]-1
+        
+        # What level is this bar among the bars above the plot?
+        level = len(significant_combinations) - i
+        # Plot the bar
+        bar_height = (yrange * 0.08 * level) + top
+        bar_tips = bar_height - (yrange * 0.02)
+        axes.plot(
+            [x1, x1, x2, x2],
+            [bar_tips, bar_height, bar_height, bar_tips], lw=1, c='k')
+        # Significance level
+        p = significant_combination[1]
+        if p < 0.001:
+            sig_symbol = '***'
+        elif p < 0.01:
+            sig_symbol = '**'
+        elif p < 0.05:
+            sig_symbol = '*'
+        text_height = bar_height + (yrange * 0.01)
+        axes.text((x1 + x2) * 0.5, text_height, sig_symbol, ha='center', c='k')
+
+    # Adjust y-axis
+    bottom, top = axes.get_ylim()
+    yrange = top - bottom
+    axes.set_ylim(bottom - 0.02 * yrange, top)
+
+    # Annotate sample size below each box
+    if ANNOT:
+        for i, dataset in enumerate(data):
+            sample_size = len(dataset)
+            axes.text(i , bottom, fr'n = {sample_size}', ha='center', size='x-small')
+
+#     plt.show()
+
+def convert_pvalue_to_asterisks(pvalue):
+    if pvalue <= 0.0001:
+        return "****"
+    elif pvalue <= 0.001:
+        return "***"
+    elif pvalue <= 0.01:
+        return "**"
+    elif pvalue <= 0.05:
+        return "*"
+    return "ns"
+
+def calc_statistics(PCI_states, ax):
+    y_min, y_max = ax.get_ylim()
+    Post_hoc=sp.posthoc_conover(PCI_states, p_adjust = 'holm') # the stat for the first
+
+    alpha = 0.05  # Significance level
+    xtic = np.arange(1,5)
+    y_max =max(max(PCI_states[0]), max(PCI_states[1]),max(PCI_states[2]),max(PCI_states[3]))
+    for j in range(1,5): # iterate nodes
+        posthoc = Post_hoc[j]
+        grouptaub80 = PCI_states[j-1]
+        for i in range(j+1,5):
+            grouptaue = PCI_states[i-1]
+            
+            
+            p_value = posthoc[i]
+            ns = convert_pvalue_to_asterisks(p_value)
+            if p_value < alpha:
+                print("significant")
+                ax.plot([xtic[j-1], xtic[i-1]], [y_max + ((j-1)*0.01)+((i-1)*0.02)+(0.1), y_max + ((j-1)*0.01)+((i-1)*0.02)+(0.1)], linewidth=1.5, color='black')
+                ax.text((xtic[j-1]+ xtic[i-1])/2,( y_max + ((j-1)*0.01)+((i-1)*0.02)+(0.1)), ns, fontsize=12, ha='center')
+    ax.relim()
+    ax.autoscale_view()
+
+def load_pci_results_pipeline(parameters, i_trials, n_trials, stimval=1e-3, b_e=5, Iext=0.000315, tau_e=5.0, tau_i=5.0, local_folder=False):
+    """
+    local_folder: True if you want to take the lionel files from the local folder in the git repository (or also if you work from laptop)
+    """
+    if local_folder:
+        ffolder_root = './TVB/pers_stim/Lionel/' 
+        string='_tau_e_'
+        file_name = ffolder_root + f'LionelJune2020_Params_PCI_bE_{b_e}_stim_{stimval}{string}{tau_e}_trial_{i_trials}_pers_stims.npy'
+        try:
+            data_curr = np.load(file_name, encoding = 'latin1', allow_pickle = True).item()
+        except FileNotFoundError:
+            try:
+                # print("trying tau_i")
+                string='_tau_i_'
+                file_name = ffolder_root + f'LionelJune2020_Params_PCI_bE_{b_e}_stim_{stimval}{string}{tau_e}_trial_{i_trials}_pers_stims.npy'
+                data_curr = np.load(file_name, encoding = 'latin1', allow_pickle = True).item()
+            except FileNotFoundError:    
+                print("not existing file: ", file_name)
+                pass
+    
+    else:            
+        sim_name =  f"stim_{stimval}_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{i_trials*n_trials+(n_trials-1)}"
+        folder_path = './TVB/result/evoked/' + sim_name+'/'
+        file_name = folder_path + f'Params_PCI_bE_{b_e}_stim_{stimval}_tau_e_{tau_e}_tau_i_{tau_i}_trial_{i_trials}.npy'
+
+        try:
+            data_curr = np.load(file_name, encoding = 'latin1', allow_pickle = True).item()
+        except FileNotFoundError:
+            print("not existing file: ", file_name)
+            pass
+
+    return data_curr
+
+def make_pci_dict(i_trials, n_trials,data_curr):
+    seeds_arr  = (i_trials*n_trials)+np.arange(0,5,1)
+
+    if i_trials==0:
+        result_dict = {index: item for index, item in zip(seeds_arr, data_curr['PCI'][-n_trials:])}
+    else:
+        new_dict = {index: item for index, item in zip(seeds_arr, data_curr['PCI'][-n_trials:])}
+        result_dict.update(new_dict)
+    
+    return result_dict
+
+def create_PCI_all(parameters, params, n_trials=5, stimvals = [1e-5, 1e-4, 1e-3],local_folder=False):
+    """
+    it creates a list with the PCI values
+
+    DICT = False #True if you also want to create the dictionary for the plot with the lines and the seed
+    local_folder = True #True if you want the files from './TVB/pers_stim/Lionel/' 
+
+    """ 
+ 
+    PCI_all=[]
+    # dict_all = []
+
+    for ampstim in stimvals:
+        PCI_states = []
+        # dict_PCI = []
+        for b_e, tau_e, Nseeds in params: 
+            PCI_curr = []
+            for i_trials in range(int(Nseeds/n_trials)):
+                data_curr = load_pci_results_pipeline(parameters, i_trials, n_trials, stimval=ampstim, b_e=b_e, tau_e=tau_e, local_folder=local_folder)    
+                PCI_curr.append(data_curr['PCI'][-n_trials:])          
+                # print(i_trials, len(data_curr['PCI']))
+            # print("append wake")
+            PCI_states.append(np.concatenate(PCI_curr))
+        PCI_all.append(PCI_states)
+    
+    return PCI_all
+
+def create_dataset_for_raincloud(PCI_all, stimvals, conditions= ['wake', 'nmda', 'gaba', 'sleep'] ):
+    
+    size_seeds = len(PCI_all[0][0])
+    cond_count = len(conditions)
+    
+    condition_arrays = {condition: np.full(size_seeds, condition) for condition in conditions}
+    cond_arr = np.concatenate([condition_arrays[condition] for condition in conditions])
+    # print(cond_arr.shape)
+    seeds = np.arange(0,size_seeds,1)
+    seed_arr = np.tile(seeds, cond_count)
+
+    final_arr = []
+    for i in range(len(PCI_all)):
+        pci_arr = np.hstack(PCI_all[i])
+        # print(pci_arr.shape)
+        stim_arr = np.full(pci_arr.shape[0], stimvals[i])
+        # print(stim_arr.shape)
+        all_arr = np.vstack((pci_arr, cond_arr, stim_arr, seed_arr))
+        final_arr.append(all_arr)
+
+    final_array = np.hstack(final_arr)
+
+    df=pd.DataFrame(final_array.T, columns = ["PCI", "cond", "stim", "seed"])
+    df['PCI'] = df['PCI'].map(lambda x: float(x))
+    df['stim'] = df['stim'].map(lambda x: float(x)*1e3)
+    df['seed'] = df['seed'].map(lambda x: int(x))
+
+    df_small=df
+    df_small.head()
+
+    return df_small
+
+def plot_raincloud_with_stats(parameters, params, n_trials=5, stimvals=[1e-3], pick_stim=1, conditions= ['wake', 'nmda', 'gaba', 'sleep'],  
+                              colors = [ "steelblue", '#6d0a26', '#9b6369', '#c0b3b4'],
+                              dx='stim', dy='PCI', dhue='cond', ort='v', sigma=0.2, local_folder=False):
+    """
+    df
+    pick_stim: the stimulus for which you will compare
+    colors should be at least as many as the conditions
+    dx, dy, dhue, ort, sigma: parameters for the raincloud
+    """
+    if local_folder:
+        print("Loading paper params:")
+        params = [[5, 5.0, 60], [30, 3.75, 60], [30, 7.0, 60], [120, 5.0, 60]] # b_e, tau, nseeds
+        conditions = ['wake', 'nmda', 'gaba', 'sleep'] #conditions that the params describe
+        stimvals = [1e-5, 1e-4, 1e-3] #stimvals to load
+        n_trials=5
+        for i in range(len(conditions)):
+            print(f"For {conditions[i]} : b_e={params[i][0]}, tau={params[i][1]}")
+        print(f"Seeds = {params[0][2]}, n_trials={n_trials}, stimvals={stimvals}")
+
+    print("Creating PCI_all")
+    PCI_all = create_PCI_all(parameters, params, n_trials=n_trials,stimvals = stimvals, local_folder=local_folder)
+
+    print("Creating dataframe")
+    df = create_dataset_for_raincloud(PCI_all, stimvals = stimvals, conditions= conditions)
+
+    #Check if there are more than one pick_stims:
+    if type(pick_stim) is list and len(pick_stim)>1: 
+        df_use = df[df['stim'].isin(pick_stim)]
+        if len(np.unique(df_use['stim']))>1:
+            plot_all_stimuli(df_use, sigma)
+        else:
+            print(f"Only stim = {np.unique(df_use['stim'])} exists for these parameters\nTry again with the correct value in pick_stim")
+    else:
+        if type(pick_stim) is list:
+            pick_stim = pick_stim[0]
+        df_use = df[df['stim']==pick_stim]
+        # df_use = df
+        if colors and len(colors)<=len(conditions):
+            pal = sns.color_palette(colors)
+        else:
+            pal = sns.color_palette('tab20')
+        
+        print("Plotting..")
+        f, ax = plt.subplots(figsize=(5,4))
+        # pal = 'Set2'
+        ax = pt.RainCloud(x = dx, y = dy, hue = dhue, data = df_use,
+            palette = pal, bw = sigma, width_viol = 0.6, width_box = .25, ax = ax,linewidth = 0.8, point_size = 3, point_estimator= np.median,legend_title = 'Stimulus(Hz)',
+            orient = ort , dodge=True, pointplot = False,  cloud_alpha=0.3, alpha = 0.6,offset = 0.2, box_showfliers=False)
+
+        for patch in ax.patches:
+            fc = patch.get_facecolor()
+            patch.set_facecolor(mplcol.to_rgba(fc, 0.4))
+
+        ax =stats_rain(df, ax, val_col='PCI', group_col='cond')
+
+        ax.invert_xaxis()
+    plt.show()
+
+def plot_all_stimuli(df, sigma):
+    colors = ["tan", "darkred", "steelblue"]
+    pal = sns.color_palette(colors)
+
+    dx='cond'; dy='PCI'; dhue='stim'; ort='v'
+    f, ax = plt.subplots(figsize=(10,4))
+    # pal = 'Set2'
+    ax = pt.RainCloud(x = dx, y = dy, hue = dhue, data = df,
+        palette = pal, bw = sigma, width_viol = 0.6, width_box = .2, ax = ax,linewidth = 0.8, 
+        point_size = 3, point_estimator= np.median,legend_title = 'Stimulus(Hz)',
+        orient = ort , dodge=True, pointplot = True,  cloud_alpha=0.3, alpha = 0.6,offset = 0.15, box_showfliers=False)
+
+    for patch in ax.patches:
+        fc = patch.get_facecolor()
+        patch.set_facecolor(mplcol.to_rgba(fc, 0.4))
+
+    # custom_labels =   ["Wakefulness", "$NREM$ sleep", "$NMDA$-blockers", "$GABA_{A}$-potentiators"]
+
+    # plt.xticks(range(4), custom_labels, fontsize=12)
+    plt.ylabel("PCI",fontsize=15)
+    plt.xlabel("")
+
+    plt.tight_layout()

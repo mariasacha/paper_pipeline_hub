@@ -7,8 +7,19 @@ from math import erf
 import argparse
 from functions import *
 from Tf_calc.cell_library import get_neuron_params_double_cell
+from Tf_calc.theoretical_tools import convert_params
+import ast
 
-
+def parse_kwargs(kwargs_str):
+    try:
+        kwargs = ast.literal_eval(kwargs_str)
+        if not isinstance(kwargs, dict):
+            raise ValueError("Invalid dictionary format")
+        return kwargs
+    except (SyntaxError, ValueError) as e:
+        print(f"Error parsing kwargs: {e}")
+        return None
+    
 def TF(P,fexc,finh,adapt, El):
     #Transfer Function 
 
@@ -72,31 +83,71 @@ def OU(tfin):
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations')
 
-parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
+# parser.add_argument('--b_e', type=float, default=0.0, help='adaptation - in pA')
+
 parser.add_argument('--iext', type=float, default=0.3, help='external input - in Hz')
-parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
-parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
+parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
+parser.add_argument('--plat_dur', type=float, default=0, help='If 0 the input will be applied for the whole duration of the simulation')
+
+# parser.add_argument('--tau_e', type=float, default=5.0, help='excitatory synaptic decay - in ms')
+# parser.add_argument('--tau_i', type=float, default=5.0, help='inhibitory synaptic decay - in ms')
 parser.add_argument('--T', type=float, default=20.0, help='time constant - in ms')
-parser.add_argument('--use_new', type=bool, default=True, help='use input parameters - if False: will use the ones in params file')
+parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
 
 parser.add_argument('--time', type=float, default=10, help='Total Time of simulation - in s')
 
 parser.add_argument('--file_fs',  default='FS-cell_CONFIG1_fit.npy', help='fit for fs')
 parser.add_argument('--file_rs',  default='RS-cell0_CONFIG1_fit.npy', help='fit for rs')
 
-parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
 
 args = parser.parse_args()
 
 CELLS = args.cells
-params = get_neuron_params_double_cell(CELLS, SI_units = True)
+params = get_neuron_params_double_cell(CELLS)
 
-use_new = args.use_new
 
-if use_new:
-    params['b_e'] = args.b_e *1e-12
-    params['tau_e'] = args.tau_e *1e-3
-    params['tau_i'] = args.tau_e *1e-3
+# # Extract values from params for each key
+# extracted_values = {}
+# for key in params.keys():
+#     extracted_values[key] = params[key]
+# # Unpack extracted values into variables
+# locals().update(extracted_values)
+
+
+# # Use the parameters that they are passed in kwargs
+# kwargs = parse_kwargs(args.kwargs)
+# if kwargs['use']: #only if use=True
+#     for key in kwargs.keys():
+#         if key in params.keys():
+#             extracted_values[key] = kwargs[key]
+#         elif key == 'use':
+#             continue
+#         else:
+#             raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
+# # Update locals
+#     locals().update(extracted_values)
+
+# Use the parameters that they are passed in kwargs
+kwargs = parse_kwargs(args.kwargs)
+if kwargs['use']: #only if use=True
+    for key in kwargs.keys():
+        if key in params.keys():
+            params[key] = kwargs[key]
+        elif key == 'use':
+            continue
+        else:
+            raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
+# Update locals
+    params = convert_params(params)
+    locals().update(params)
+
+
+# use_new = args.use_new
+
+# if use_new:
+#     params['b_e'] = args.b_e *1e-12
+#     params['tau_e'] = args.tau_e *1e-3
+#     params['tau_i'] = args.tau_e *1e-3
 
 p = params
 
@@ -140,9 +191,11 @@ AmpStim = args.input #0
 time_peek = 200.
 TauP=20 #20
 
-plat = TotTime*1000 - time_peek - TauP #100
-plat = 900
-print("plat=", plat)
+if not args.plat_dur:
+    plat = TotTime*1000 - time_peek - TauP #100
+else:
+    plat = args.plat_dur
+
 test_input = []
 t2 = np.arange(0, TotTime*1e3, 0.1)
 for ji in t2:
@@ -170,7 +223,7 @@ LSw=[]
 LSfe=[]
 LSfi=[]
 if AmpStim>0:
-    print("Input = ", AmpStim)
+    print("Input = ", AmpStim, "plat=", plat)
 print("starting")
 for i in range(len(t)):
 

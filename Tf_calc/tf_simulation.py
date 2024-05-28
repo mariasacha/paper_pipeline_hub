@@ -1,9 +1,14 @@
 from brian2 import *
 import time
-import argparse 
-from Tf_calc.cell_library import get_neuron_params_double_cell
-from functions import get_np_linspace, bin_array
+import sys
 import os
+cwd = os.getcwd()
+parent_dir = os.path.dirname(cwd)
+sys.path.append(parent_dir)
+
+import argparse 
+from cell_library import get_neuron_params_double_cell
+from functions import get_np_linspace, bin_array
 from IPython.display import clear_output
 
 start_scope()
@@ -38,29 +43,28 @@ TotTime = args.time
 start_time = time.time()
 
 DT=0.1 # time step
-defaultclock.dt = DT*ms
+# defaultclock.dt = DT*ms
 
 duration = TotTime*ms
 
-# C = Cm*pF
-# gL = Gl*nS
-# tauw = tau_w*ms
+C = Cm*pF
+print(C)
+gL = Gl*nS
+tauw = tau_w*ms
 # a =0.0*nS# 4*nS
 #b = 0.08*nA
 # I = 0.*nA
-# Ee=E_e*mV
-# Ei=E_i*mV
+Ee=E_e*mV
+Ei=E_i*mV
 i=0
+Is = 0.*nA
 eqs="""
-dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+Is-w)/Cm :volt (unless refractory)
+dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+Is-w)/C :volt (unless refractory)
 dw/dt=(a*(vm-EL)-w)/tauw : amp
 dGsynI/dt = -GsynI/TsynI : siemens
 dGsynE/dt = -GsynE/TsynE : siemens
 TsynI:second
 TsynE:second
-Is:amp
-Cm:farad
-gL:siemens
 Vr:volt
 b:amp
 DeltaT:volt
@@ -68,10 +72,6 @@ Vcut:volt
 VT:volt
 EL:volt
 a:siemens
-tauw:second
-Dt:volt
-Ee:volt
-Ei:volt
 """
 
 
@@ -97,9 +97,10 @@ for rate_exc in range_exc:
 
 		# Population 1 - Fast Spiking
 
-		G_inh = NeuronGroup(1, eqs, threshold='vm > Vcut',refractory=5*ms, reset="vm = Vr; w += b", method='heun')
+		G_inh = NeuronGroup(1, model=eqs, threshold='vm > Vcut',refractory=5*ms, reset="vm = Vr; w += b", method='heun')
 		G_inh.vm = V_m * mV 
-		G_inh.w = a_i*nS * (G_inh.vm - G_inh.EL)
+		G_inh.a = a_i * nS 
+		G_inh.w = G_inh.a * (G_inh.vm - G_inh.EL)
 		G_inh.Vr = V_r * mV  
 		G_inh.TsynI = tau_i * ms  
 		G_inh.TsynE = tau_e * ms  
@@ -110,18 +111,19 @@ for rate_exc in range_exc:
 		G_inh.EL = EL_i * mV
 		G_inh.GsynI=0.0*nS
 		G_inh.GsynE=0.0*nS
-		G_inh.Ee= E_e*mV
-		G_inh.Ei= E_i*mV
-		G_inh.Cm = Cm*pF
-		G_inh.gL = Gl*nS
-		G_inh.tauw = tau_w*ms 
-		G_inh.Is = 0.0*nA 
+		# G_inh.Ee= E_e*mV
+		# G_inh.Ei= E_i*mV
+		# G_inh.Cm = Cm*pF
+		# G_inh.gL = Gl*nS
+		# G_inh.tauw = tau_w*ms 
+		# G_inh.Is = 0.0*nA 
 
 
 		# Population 2 - Regular Spiking
-		G_exc = NeuronGroup(1, eqs, threshold='vm > Vcut', refractory=5*ms, reset="vm = Vr; w += b", method='heun')
+		G_exc = NeuronGroup(1, model=eqs, threshold='vm > Vcut', refractory=5*ms, reset="vm = Vr; w += b", method='heun')
 		G_exc.vm = V_m*mV
-		G_exc.w = a_e*nS * (G_exc.vm - G_exc.EL)
+		G_exc.a = a_e * nS 
+		G_exc.w = G_exc.a * (G_exc.vm - G_exc.EL)
 		G_exc.Vr = V_r*mV
 		G_exc.TsynI =tau_i*ms
 		G_exc.TsynE =tau_e*ms
@@ -132,12 +134,12 @@ for rate_exc in range_exc:
 		G_exc.EL=EL_e*mV
 		G_exc.GsynI=0.0*nS
 		G_exc.GsynE=0.0*nS
-		G_exc.Ee=E_e*mV
-		G_exc.Ei=E_i*mV
-		G_exc.Cm = Cm*pF
-		G_exc.gL = Gl*nS
-		G_exc.tauw = tau_w*ms 
-		G_exc.Is = 0.0*nA 
+		# G_exc.Ee=E_e*mV
+		# G_exc.Ei=E_i*mV
+		# G_exc.Cm = Cm*pF
+		# G_exc.gL = Gl*nS
+		# G_exc.tauw = tau_w*ms 
+		# G_exc.Is = 0.0*nA 
 			
 		P_inh = int(p_con*gei*Ntot)
 		P_exc = int(p_con*(1- gei)*Ntot)
@@ -222,17 +224,17 @@ for rate_exc in range_exc:
 	if i % 1 == 0:
 		print(i)
 try:
-	os.listdir('./Tf_calc/data/')
+	os.listdir('./data/')
 except:
-	os.makedirs('./Tf_calc/data/')
+	os.makedirs('./data/')
 #
-np.save(f'./Tf_calc/data/ExpTF_Adapt_{Npts_e}x{Npts_i}_{save_name}.npy', Adapt)
-np.save(f'./Tf_calc/data/ExpTF_inh_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_inh)
-np.save(f'./Tf_calc/data/ExpTF_exc_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_exc)
-np.save(f'./Tf_calc/data/ExpTF_muve_{Npts_e}x{Npts_i}_{save_name}.npy', muve)
-np.save(f'./Tf_calc/data/ExpTF_muvi_{Npts_e}x{Npts_i}_{save_name}.npy', muvi)
+np.save(f'./data/ExpTF_Adapt_{Npts_e}x{Npts_i}_{save_name}.npy', Adapt)
+np.save(f'./data/ExpTF_inh_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_inh)
+np.save(f'./data/ExpTF_exc_{Npts_e}x{Npts_i}_{save_name}.npy', FRout_exc)
+np.save(f'./data/ExpTF_muve_{Npts_e}x{Npts_i}_{save_name}.npy', muve)
+np.save(f'./data/ExpTF_muvi_{Npts_e}x{Npts_i}_{save_name}.npy', muvi)
 
-np.save(f'./Tf_calc/data/params_range_{Npts_e}x{Npts_i}_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
+np.save(f'./data/params_range_{Npts_e}x{Npts_i}_{save_name}.npy', np.array([range_exc, range_inh, params], dtype='object'), allow_pickle=True)
 
 end_time = time.time()
 execution_time = end_time - start_time

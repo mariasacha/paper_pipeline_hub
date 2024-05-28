@@ -1,4 +1,4 @@
 result/
 __pycache__/
-trials/network_sims/
+Dyn_Analysis/trials/network_sims/
 fill_gaps_dyn/

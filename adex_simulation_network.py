@@ -39,12 +39,26 @@ CELLS = args.cells
 
 params = get_neuron_params_double_cell(CELLS)
 
-# Extract values from params for each key
-extracted_values = {}
-for key in params.keys():
-    extracted_values[key] = params[key]
-# Unpack extracted values into variables
-locals().update(extracted_values)
+# # Extract values from params for each key
+# extracted_values = {}
+# for key in params.keys():
+#     extracted_values[key] = params[key]
+# # Unpack extracted values into variables
+# locals().update(extracted_values)
+
+
+# # Use the parameters that they are passed in kwargs
+# kwargs = parse_kwargs(args.kwargs)
+# if kwargs['use']: #only if use=True
+#     for key in kwargs.keys():
+#         if key in params.keys():
+#             extracted_values[key] = kwargs[key]
+#         elif key == 'use':
+#             continue
+#         else:
+#             raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
+# # Update locals
+#     locals().update(extracted_values)
 
 
 # Use the parameters that they are passed in kwargs
@@ -52,14 +66,13 @@ kwargs = parse_kwargs(args.kwargs)
 if kwargs['use']: #only if use=True
     for key in kwargs.keys():
         if key in params.keys():
-            extracted_values[key] = kwargs[key]
+            params[key] = kwargs[key]
         elif key == 'use':
             continue
         else:
             raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
 # Update locals
-    locals().update(extracted_values)
-
+    locals().update(params)
 
 
 save_path = args.save_path
@@ -106,7 +119,7 @@ seed(9) #9,11,25
 sim_name = f'_b_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_eli_{int(EL_i)}_ele_{int(EL_e)}_iext_{Iext}'
 
 
-print('b_e= ', b_e, 'plat=', plat)
+print('b_e= ', b_e)
 eqs = """
 dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
 dw/dt=(a*(vm-EL)-w)/tauw : amp
@@ -159,7 +172,7 @@ G_exc.EL=EL_e*mV
 
 # external drive--------------------------------------------------------------------------
 if AmpStim > 0:
-    print("Input =", AmpStim)
+    print("Input =", AmpStim, 'plat=', plat)
     P_ed=PoissonGroup(N2, rates='Input_Stim(t)')
 else:
     P_ed=PoissonGroup(N2, rates=Iext*Hz)

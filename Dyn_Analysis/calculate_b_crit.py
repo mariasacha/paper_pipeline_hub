@@ -5,6 +5,11 @@ import argparse
 from scipy import optimize
 import os
 from IPython.display import clear_output
+import sys
+cwd = os.getcwd()
+parent_dir = os.path.dirname(cwd)
+sys.path.append(parent_dir)
+
 
 """
 returns array of type [[tau_e_1, tau_i_1, b_crit_1], [tau_e_2, tau_i_2, b_crit_2], ..., [tau_e_n, tau_i_n, b_crit_n]]
@@ -81,7 +86,7 @@ parser.add_argument('--overwrite', type=bool, default=False, help='If True it wi
 
 args = parser.parse_args()
 
-save_path = args.save_path
+save_path = "./Dyn_Analysis" +  args.save_path + "/"
 OVERWRITE = args.overwrite
 
 #Choose the values of the scan
@@ -130,8 +135,8 @@ gei=0.2; #percentage of inhibitory cells
 Ntot=10000; #total number of cells
 
 #Fitting coefficients
-PRS=np.load('RS-cell0_CONFIG1_fit.npy')
-PFS=np.load('FS-cell_CONFIG1_fit.npy')
+PRS=np.load('./Tf_calc/data/RS-cell0_CONFIG1_fit.npy')
+PFS=np.load('./Tf_calc/data/FS-cell_CONFIG1_fit.npy')
 
 
 Ele =-64*1e-3 #leak reversal (exc)

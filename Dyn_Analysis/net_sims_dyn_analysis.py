@@ -18,7 +18,7 @@ parser.add_argument('--nseeds', type=get_np_arange , default='0,100,5', help='se
 
 #Other
 parser.add_argument('--time', type=float, default=2000, help='Total Time of simulation (ms)')
-parser.add_argument('--save_path', type=str, default='./', help='Path to save the results of the simulations')
+parser.add_argument('--save_path', type=str, default='/trials', help='Path to save the results of the simulations')
 parser.add_argument('--overwrite', type=bool, default=False, help='If True it will overwrite the existant paths')
 parser.add_argument('--surv_time_calc', type=bool, default=False, help='If True calculate the survival time and save it')
 
@@ -27,7 +27,7 @@ args = parser.parse_args()
 surv_time_calc = args.surv_time_calc
 TotTime = args.time
 duration = TotTime*ms
-save_path = args.save_path
+save_path = "./Dyn_Analysis" +  args.save_path + "/"
 OVERWRITE = args.overwrite
 BIN=5
 #Choose the values of the scan
@@ -96,8 +96,8 @@ for nseed, tau_I, b_ad, tau_E in combinations:
 	seed(int(nseed))
 
 	sim_name = f"b_{b_ad}_tau_i_{round(tau_I,1)}_tau_e_{round(tau_E,1)}_ampst_{AmpStim}_seed_{nseed}"
-	str1 = save_path + 'network_sims/' +sim_name + '_exc.npy'
-	str2 = save_path + 'network_sims/' +sim_name + '_inh.npy'
+	str1 =  save_path + 'network_sims/' +sim_name + '_exc.npy'
+	str2 =  save_path + 'network_sims/' +sim_name + '_inh.npy'
 
 	try:
 		os.listdir(save_path+'network_sims/')

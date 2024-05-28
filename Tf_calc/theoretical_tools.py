@@ -5,7 +5,6 @@ from scipy.optimize import minimize, fixed_point, fsolve
 # import sys
 from scipy.special import erfc, erfcinv
 from scipy.ndimage import maximum_filter
-from Tf_calc.cell_library import get_neuron_params_double_cell
 from math import erf
 
 import sys, pathlib
