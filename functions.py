@@ -12,6 +12,8 @@ import numpy.random as rgn
 import itertools
 import json
 import os
+import sys
+import shlex
 
 from IPython.display import clear_output
 import builtins 
@@ -79,9 +81,6 @@ def input_rate(t, t1_exc, tau1_exc, tau2_exc, ampl_exc, plateau):
         heaviside(-(t - (t1_exc+plateau))) * heaviside(t - (t1_exc))+ \
         np.exp(-(t - (t1_exc+plateau)) ** 2 / (2. * tau2_exc ** 2)) * heaviside(t - (t1_exc+plateau)))
     return inp
-
-
-@njit
 
 
 def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin):
@@ -2030,3 +2029,22 @@ def plot_all_stimuli(df, sigma):
     plt.xlabel("")
 
     plt.tight_layout()
+
+def string_create(kwargs, command):
+    # Convert dictionary to JSON string
+    dkwargs_str = json.dumps(kwargs)
+
+    # Handle the JSON string quoting for different platforms
+    if sys.platform == "win32":
+        # On Windows, you may need to escape the double quotes in the JSON string
+        dkwargs_str = json.dumps(dkwargs_str)
+    else:
+        dkwargs_str = shlex.quote(dkwargs_str)
+
+    # Construct the command
+    # command = f"MF_script_with_OS.py --kwargs {dkwargs_str} --time {time} --file_fs {file_fs} --file_rs {file_rs} --iext {iext}"
+
+    # Split the command into a list for subprocess
+    command_list = shlex.split(command)
+
+    return command_list

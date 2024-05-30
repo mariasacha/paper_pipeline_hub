@@ -7,15 +7,29 @@ import ast
 # from Tf_calc.model_library import get_model
 from Tf_calc.cell_library import get_neuron_params_double_cell
 
-def parse_kwargs(kwargs_str):
-    try:
-        kwargs = ast.literal_eval(kwargs_str)
-        if not isinstance(kwargs, dict):
-            raise ValueError("Invalid dictionary format")
-        return kwargs
-    except (SyntaxError, ValueError) as e:
-        print(f"Error parsing kwargs: {e}")
-        return None
+def convert_values(input_dict):
+    converted_dict = {}
+    for key, value in input_dict.items():
+        # Check for boolean values
+        if value.lower() == 'true':
+            converted_dict[key] = True
+        elif value.lower() == 'false':
+            converted_dict[key] = False
+        # Check for integer values
+        elif value.isdigit():
+            converted_dict[key] = int(value)
+        # Add more type checks if needed (e.g., for floats)
+        else:
+            converted_dict[key] = value  # Keep the value as is if no conversion is needed
+    return converted_dict
+
+# Define the custom action to parse keyword arguments
+class ParseKwargs(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, dict())
+        for value in values:
+            key, value = value.split('=')
+            getattr(namespace, self.dest)[key] = value
     
 start_scope()
 
@@ -30,7 +44,8 @@ parser.add_argument('--time', type=float, default=1000, help='Total Time of simu
 parser.add_argument('--save_path', default=None, help='save path ')
 parser.add_argument('--save_mean', default=True, help='save mean firing rate (if save_path is provided)')
 parser.add_argument('--save_all', default=False, help='save the whole simulation (if save_path is provided)')
-parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
+# parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
+parser.add_argument('--kwargs', nargs='*', required=True, action=ParseKwargs, help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
 
 args = parser.parse_args()
 
@@ -39,30 +54,13 @@ CELLS = args.cells
 
 params = get_neuron_params_double_cell(CELLS)
 
-# # Extract values from params for each key
-# extracted_values = {}
-# for key in params.keys():
-#     extracted_values[key] = params[key]
-# # Unpack extracted values into variables
-# locals().update(extracted_values)
-
-
-# # Use the parameters that they are passed in kwargs
-# kwargs = parse_kwargs(args.kwargs)
-# if kwargs['use']: #only if use=True
-#     for key in kwargs.keys():
-#         if key in params.keys():
-#             extracted_values[key] = kwargs[key]
-#         elif key == 'use':
-#             continue
-#         else:
-#             raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
-# # Update locals
-#     locals().update(extracted_values)
-
 
 # Use the parameters that they are passed in kwargs
-kwargs = parse_kwargs(args.kwargs)
+kwargs1 = args.kwargs
+# print(kwargs1)
+kwargs = convert_values(kwargs1)
+
+
 if kwargs['use']: #only if use=True
     for key in kwargs.keys():
         if key in params.keys():
@@ -72,7 +70,8 @@ if kwargs['use']: #only if use=True
         else:
             raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
 # Update locals
-    locals().update(params)
+locals().update(params)
+
 
 
 save_path = args.save_path

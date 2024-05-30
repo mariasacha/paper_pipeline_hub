@@ -6,50 +6,76 @@ import numpy as np
 import ast  
 from Tf_calc.cell_library import get_neuron_params_double_cell
 
-def parse_kwargs(kwargs_str):
-    try:
-        kwargs = ast.literal_eval(kwargs_str)
-        if not isinstance(kwargs, dict):
-            raise ValueError("Invalid dictionary format")
-        return kwargs
-    except (SyntaxError, ValueError) as e:
-        print(f"Error parsing kwargs: {e}")
-        return None
+def convert_values(input_dict):
+    converted_dict = {}
+    for key, value in input_dict.items():
+        # Check for boolean values
+        if value.lower() == 'true':
+            converted_dict[key] = True
+        elif value.lower() == 'false':
+            converted_dict[key] = False
+        # Check for integer values
+        elif value.isdigit():
+            converted_dict[key] = int(value)
+        # Add more type checks if needed (e.g., for floats)
+        else:
+            converted_dict[key] = value  # Keep the value as is if no conversion is needed
+    return converted_dict
+
+class ParseKwargs(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, dict())
+        for value in values:
+            key, value = value.split('=')
+            getattr(namespace, self.dest)[key] = value
+
+
+# def parse_kwargs(kwargs_str):
+#     try:
+#         kwargs = ast.literal_eval(kwargs_str)
+#         if not isinstance(kwargs, dict):
+#             raise ValueError("Invalid dictionary format")
+#         return kwargs
+#     except (SyntaxError, ValueError) as e:
+#         print(f"Error parsing kwargs: {e}")
+#         return None
+
+
 
 start_scope()
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--type', type=str, default='RS', help='type of cell (RS or FS)')
-parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
+parser.add_argument('--cell', default='RS', help='type of cell (RS or FS)')
+# parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
+parser.add_argument('--kwargs', nargs='*', required=True, action=ParseKwargs, help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
 
 parser.add_argument('--iext', type=float, default=0.3, help='input current (nA)')
 parser.add_argument('--time', type=float, default=200, help='Total Time of simulation (ms)')
+
 args = parser.parse_args()
 
-CELLS = args.type
+CELLS = args.cell
+
 params = get_neuron_params_double_cell(CELLS)
 
+
+kwargs1 = args.kwargs
+kwargs = convert_values(kwargs1)
+print(kwargs)
+
 # Extract values from params for each key
-extracted_values = {}
-for key in params.keys():
-    extracted_values[key] = params[key]
-# Unpack extracted values into variables
-locals().update(extracted_values)
-
-
-# Use the parameters that they are passed in kwargs
-kwargs = parse_kwargs(args.kwargs)
 if kwargs['use']: #only if use=True
     for key in kwargs.keys():
         if key in params.keys():
-            extracted_values[key] = kwargs[key]
+            params[key] = kwargs[key]
         elif key == 'use':
             continue
         else:
             raise Exception(f"Key '{key}' not in the valid keys \nValid keys: {params.keys()}")
 # Update locals
-    locals().update(extracted_values)
+locals().update(params)
+
 
 
 Iext = args.iext
@@ -65,31 +91,31 @@ I = Iext*nA
 
 
 eqs = """
-dvm/dt=(gL*(EL-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
-dw/dt=(a*(vm-EL)-w)/tauw : amp
+dvm/dt=(gL*(El-vm)+gL*DeltaT*exp((vm-VT)/DeltaT)-GsynE*(vm-Ee)-GsynI*(vm-Ei)+I-w)/C : volt (unless refractory)
+dw/dt=(a*(vm-El)-w)/tauw : amp
 dGsynI/dt = -GsynI/TsynI : siemens
 dGsynE/dt = -GsynE/TsynE : siemens
 TsynI:second
 TsynE:second
 Vr:volt
-b:amp
+b_e:amp
 DeltaT:volt
 Vcut:volt
 VT:volt
-EL:volt
+El:volt
 """
 
 G_exc = NeuronGroup(1, model=eqs, threshold='vm > Vcut',refractory=5*ms,
-                     reset="vm = Vr; w += b", method='heun')
+                     reset="vm = Vr; w += b_e", method='heun')
 G_exc.vm = V_m*mV#EL
-G_exc.w = a * (G_exc.vm - G_exc.EL)
+G_exc.w = a * (G_exc.vm - G_exc.El)
 G_exc.Vr = V_r*mV 
-G_exc.b=b*pA
+G_exc.b_e=b*pA
 G_exc.DeltaT=delta*mV
 G_exc.VT=V_th*mV
 # G_exc.Vcut=G_exc.VT + 5 * G_exc.DeltaT
 G_exc.Vcut = V_cut*mV
-G_exc.EL=EL*mV
+G_exc.El=EL*mV
 G_exc.TsynI =tau_e*ms
 G_exc.TsynE =tau_i*ms
 

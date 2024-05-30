@@ -17,7 +17,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 from functions import *
-from codes_analyses import *
 import TVB.tvb_model_reference.src.nuu_tools_simulation_human as tools
 from Tf_calc.theoretical_tools import *
 

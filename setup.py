@@ -15,6 +15,7 @@ import plotly.io as pio
 from functions import *
 import TVB.tvb_model_reference.src.nuu_tools_simulation_human as tools
 from Tf_calc.theoretical_tools import *
+import subprocess
 
 from TVB.tvb_model_reference.simulation_file.parameter.parameter_M_Berlin_new import Parameter
 parameters = Parameter()
