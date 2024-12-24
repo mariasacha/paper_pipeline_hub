@@ -2,12 +2,17 @@ from brian2 import *
 import matplotlib.pyplot as plt
 from functions import *
 import argparse
-import ast  
+import ast
+import numpy as np
+import os
 
 # from Tf_calc.model_library import get_model
 from Tf_calc.cell_library import get_neuron_params_double_cell
 
-def convert_values(input_dict):
+def convert_values(input_dict: dict) -> dict:
+    """
+    Convert string values in the input dictionary to appropriate types.
+    """
     converted_dict = {}
     for key, value in input_dict.items():
         # Check for boolean values
@@ -25,18 +30,22 @@ def convert_values(input_dict):
 
 # Define the custom action to parse keyword arguments
 class ParseKwargs(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: list, option_string: str = None):
+        """
+        Parse keyword arguments from the command line.
+        """
         setattr(namespace, self.dest, dict())
         for value in values:
             key, value = value.split('=')
             getattr(namespace, self.dest)[key] = value
-    
+
 start_scope()
 
+# Set up argument parser
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--cells', type=str, default='FS-RS', help='cell types of the populations - do not pass single cells')
 
-parser.add_argument('--iext', type=float, default=0.5, help='external input (Hz)')
+parser.add_argument('--iext', type=float, default=0.5, help='external input rate (in Hz) to a group of neurons that fire according to a Poisson process.')
 parser.add_argument('--input', type=float, default=0, help='Stable input amplitude (Hz)')
 parser.add_argument('--plat_dur', type=float, default=0, help='If 0 the input will be applied for the whole duration of the simulation')
 
@@ -44,7 +53,6 @@ parser.add_argument('--time', type=float, default=1000, help='Total Time of simu
 parser.add_argument('--save_path', default=None, help='save path ')
 parser.add_argument('--save_mean', default=True, help='save mean firing rate (if save_path is provided)')
 parser.add_argument('--save_all', default=False, help='save the whole simulation (if save_path is provided)')
-# parser.add_argument('--kwargs', type=str, default='{"use": False}', help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
 parser.add_argument('--kwargs', nargs='*', required=True, action=ParseKwargs, help='String representation of kwargs - change the first argument to "use": True before adding your kwargs, e.g: "{"use": True, "b": 60}"')
 
 args = parser.parse_args()
@@ -52,10 +60,11 @@ args = parser.parse_args()
 
 CELLS = args.cells
 
+# Get neuron parameters for the specified cell types
 params = get_neuron_params_double_cell(CELLS)
 
 
-# Use the parameters that they are passed in kwargs
+# Use the parameters that are passed in kwargs
 kwargs1 = args.kwargs
 # print(kwargs1)
 kwargs = convert_values(kwargs1)
@@ -81,6 +90,7 @@ save_all = args.save_all
 TotTime = args.time
 Iext = args.iext
 
+# Calculate the number of neurons in each population
 N1 = int(gei*Ntot)
 N2 = int((1-gei)*Ntot)
 
@@ -104,6 +114,7 @@ Input_Stim = TimedArray(test_input * Hz, dt=DT * ms)
 
 duration = TotTime*ms
 
+# Define neuron parameters
 C = Cm*pF
 gL = Gl*nS
 tauw = tau_w*ms
@@ -148,7 +159,6 @@ G_inh.TsynE = tau_e * ms
 G_inh.b = b_i * pA
 G_inh.DeltaT = delta_i * mV
 G_inh.VT = V_th * mV
-# G_inh.Vcut = G_inh.VT + 5 * G_inh.DeltaT
 G_inh.Vcut = V_cut * mV
 G_inh.EL = EL_i * mV
 
@@ -166,7 +176,6 @@ G_exc.b=b_e*pA
 G_exc.DeltaT=delta_e*mV
 G_exc.VT=V_th*mV
 G_exc.Vcut = V_cut * mV
-# G_exc.Vcut=G_exc.VT + 5 * G_exc.DeltaT
 G_exc.EL=EL_e*mV
 
 # external drive--------------------------------------------------------------------------
@@ -227,14 +236,14 @@ print('--##End simulation##--')
 # Plots -------------------------------------------------------------------------------
 
 # prepare raster plot
-RasG_inh = array([M1G_inh.t/ms, [i+N2 for i in M1G_inh.i]])
-RasG_exc = array([M1G_exc.t/ms, M1G_exc.i])
-if AmpStim>0:
-    time_array = arange(int(TotTime/DT))*DT
+RasG_inh = np.array([M1G_inh.t / ms, [i + N2 for i in M1G_inh.i]])
+RasG_exc = np.array([M1G_exc.t / ms, M1G_exc.i])
+if AmpStim > 0:
+    time_array = np.arange(int(TotTime / DT)) * DT
     input_bin = bin_array(np.array(test_input), 5, time_array)
 else:
-    input_bin = np.full(1,np.nan)
-TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon, BIN=5)
+    input_bin = np.full(1, np.nan)
+TimBinned, popRateG_exc, popRateG_inh, Pu = prepare_FR(TotTime, DT, FRG_exc, FRG_inh, P2mon, BIN=5)
 if save_path:
     try:
         os.listdir(save_path)
@@ -252,9 +261,10 @@ if save_path:
         np.save(save_path + f'{CELLS}_exc_amp_{AmpStim}.npy', np.array([popRateG_exc,AmpStim, params], dtype=object))
 
 # # ----- Raster plot + mean adaptation ------
-fig, axes = plt.subplots(2,1,figsize=(5,8))
 
-plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin)
+fig, axes = plt.subplots(2, 1, figsize=(5, 8))
+
+plot_raster_meanFR(RasG_inh, RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin)
 
 
 print(f" done")

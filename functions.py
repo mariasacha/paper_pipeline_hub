@@ -1,3 +1,4 @@
+import argparse
 from brian2 import *
 
 import scipy.signal as signal
@@ -30,44 +31,46 @@ import scikit_posthocs as sp
 import ptitprince as pt
 import matplotlib.colors as mplcol
 
+from Tf_calc.theoretical_tools import run_MF
+
 
 # prepare firing rate
-def bin_array(array, BIN, time_array):
+def bin_array(array: np.ndarray, BIN: float, time_array: np.ndarray) -> np.ndarray:
     """
     Bins an array into equally spaced bins and calculates the mean value in each bin.
 
     Parameters:
-    - array (ndarray): The array to be binned.
+    - array (np.ndarray): The array to be binned.
     - BIN (float): The width of each bin in the same units as the time array.
-    - time_array (ndarray): The time array corresponding to the array.
+    - time_array (np.ndarray): The time array corresponding to the array.
 
     Returns:
-    - ndarray: An array containing the mean value in each bin.
+    - np.ndarray: An array containing the mean value in each bin.
     """
         
     N0 = int(BIN/(time_array[1]-time_array[0]))
     N1 = int((time_array[-1]-time_array[0])/BIN)
     return array[:N0*N1].reshape((N1,N0)).mean(axis=1)
 
-def heaviside(x):
+def heaviside(x: np.ndarray) -> np.ndarray:
     """
     Heaviside step function.
 
     Parameters:
-    - x (ndarray): Input array.
+    - x (np.ndarray): Input array.
 
     Returns:
-    - ndarray: Output array with the same shape as input x.
+    - np.ndarray: Output array with the same shape as input x.
     """
     return 0.5 * (1 + np.sign(x))
    
    
-def input_rate(t, t1_exc, tau1_exc, tau2_exc, ampl_exc, plateau):
+def input_rate(t: np.ndarray, t1_exc: float, tau1_exc: float, tau2_exc: float, ampl_exc: float, plateau: float) -> np.ndarray:
     """
     Calculates the input rate based on specified parameters.
 
     Parameters:
-    - t (ndarray): Time array.
+    - t (np.ndarray): Time array.
     - t1_exc (float): Time of the maximum of external stimulation.
     - tau1_exc (float): First time constant of perturbation (rising time).
     - tau2_exc (float): Decaying time.
@@ -75,7 +78,7 @@ def input_rate(t, t1_exc, tau1_exc, tau2_exc, ampl_exc, plateau):
     - plateau (float): Duration of the plateau.
 
     Returns:
-    - ndarray: Array containing the input rate values corresponding to each time point.
+    - np.ndarray: Array containing the input rate values corresponding to each time point.
     """
     inp = ampl_exc * (np.exp(-(t - t1_exc) ** 2 / (2. * tau1_exc ** 2)) * heaviside(-(t - t1_exc)) + \
         heaviside(-(t - (t1_exc+plateau))) * heaviside(t - (t1_exc))+ \
@@ -83,7 +86,21 @@ def input_rate(t, t1_exc, tau1_exc, tau2_exc, ampl_exc, plateau):
     return inp
 
 
-def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc, Pu, axes, sim_name, input_bin):
+def plot_raster_meanFR(RasG_inh: np.ndarray, RasG_exc: np.ndarray, TimBinned: np.ndarray, popRateG_inh: np.ndarray, popRateG_exc: np.ndarray, Pu: np.ndarray, axes: np.ndarray, sim_name: str, input_bin: np.ndarray) -> None:
+    """
+    Plots raster and mean firing rate.
+
+    Parameters:
+    - RasG_inh (np.ndarray): Raster data for inhibitory neurons.
+    - RasG_exc (np.ndarray): Raster data for excitatory neurons.
+    - TimBinned (np.ndarray): Binned time array.
+    - popRateG_inh (np.ndarray): Population rate for inhibitory neurons.
+    - popRateG_exc (np.ndarray): Population rate for excitatory neurons.
+    - Pu (np.ndarray): Mean adaptation variable.
+    - axes (np.ndarray): Axes for plotting.
+    - sim_name (str): Simulation name.
+    - input_bin (np.ndarray): Input bin data.
+    """
     
     ax1 = axes[0]
     ax3 = axes[1]
@@ -112,8 +129,21 @@ def plot_raster_meanFR(RasG_inh,RasG_exc, TimBinned, popRateG_inh, popRateG_exc,
     plt.show()
 
 
-def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5):
+def prepare_FR(TotTime: float, DT: float, FRG_exc: object, FRG_inh: object, P2mon: np.ndarray, BIN: float = 5) -> tuple:
+    """
+    Prepares firing rate data.
 
+    Parameters:
+    - TotTime (float): Total time of the simulation.
+    - DT (float): Time step.
+    - FRG_exc (object): Excitatory firing rate generator.
+    - FRG_inh (object): Inhibitory firing rate generator.
+    - P2mon (np.ndarray): Adaptation variable.
+    - BIN (float): Bin width.
+
+    Returns:
+    - tuple: Binned time, excitatory population rate, inhibitory population rate, and adaptation variable.
+    """
     time_array = arange(int(TotTime/DT))*DT
 
     LfrG_exc = array(FRG_exc.rate/Hz)
@@ -128,8 +158,21 @@ def prepare_FR(TotTime,DT, FRG_exc, FRG_inh, P2mon,BIN=5):
     return TimBinned, popRateG_exc, popRateG_inh, Pu
 
 
-def create_combination(bvals, tau_es, EL_es, EL_is, Iexts, neglect_silence = True):
+def create_combination(bvals: list, tau_es: list, EL_es: list, EL_is: list, Iexts: list, neglect_silence: bool = True) -> np.ndarray:
+    """
+    Creates combinations of parameters.
 
+    Parameters:
+    - bvals (list): List of b values.
+    - tau_es (list): List of tau_e values.
+    - EL_es (list): List of EL_e values.
+    - EL_is (list): List of EL_i values.
+    - Iexts (list): List of external input values.
+    - neglect_silence (bool): Whether to neglect silent combinations.
+
+    Returns:
+    - np.ndarray: Array of parameter combinations.
+    """
     lst = [bvals, tau_es, EL_es, EL_is, Iexts]
 
     combinaison = np.array(list(itertools.product(*lst)))
@@ -149,7 +192,21 @@ def create_combination(bvals, tau_es, EL_es, EL_is, Iexts, neglect_silence = Tru
         combinaison = combinaison[idx_not, :]
     return combinaison
 
-def create_combination_neglect_only(bvals, tau_es, EL_es, EL_is, Iexts, neglect=True):
+def create_combination_neglect_only(bvals: list, tau_es: list, EL_es: list, EL_is: list, Iexts: list, neglect: bool = True) -> np.ndarray:
+    """
+    Creates combinations of parameters, neglecting only specific combinations.
+
+    Parameters:
+    - bvals (list): List of b values.
+    - tau_es (list): List of tau_e values.
+    - EL_es (list): List of EL_e values.
+    - EL_is (list): List of EL_i values.
+    - Iexts (list): List of external input values.
+    - neglect (bool): Whether to neglect specific combinations.
+
+    Returns:
+    - np.ndarray: Array of parameter combinations.
+    """
     # create the combination with the values that were neglected
     lst = [bvals, tau_es, EL_es, EL_is, Iexts]
 
@@ -172,7 +229,18 @@ def create_combination_neglect_only(bvals, tau_es, EL_es, EL_is, Iexts, neglect=
     return combinaison
 
 
-def calculate_psd_fmax(popRateG_exc, popRateG_inh, TimBinned):
+def calculate_psd_fmax(popRateG_exc: np.ndarray, popRateG_inh: np.ndarray, TimBinned: np.ndarray) -> tuple:
+    """
+    Calculates the power spectral density and maximum frequency.
+
+    Parameters:
+    - popRateG_exc (np.ndarray): Population rate for excitatory neurons.
+    - popRateG_inh (np.ndarray): Population rate for inhibitory neurons.
+    - TimBinned (np.ndarray): Binned time array.
+
+    Returns:
+    - tuple: Maximum frequency, frequency array, power spectral density for excitatory and inhibitory neurons.
+    """
     time_s = TimBinned * 0.001  # time has to be in seconds and here it is in ms
     FR_exc = popRateG_exc
     FR_inh = popRateG_inh
@@ -195,7 +263,16 @@ def calculate_psd_fmax(popRateG_exc, popRateG_inh, TimBinned):
 
     return frq_max,frq_good, pwr_region_E_good, pwr_region_I_good
 
-def plot_psd(frq_max, frq_good, pwr_region_E_good, pwr_region_I_good):
+def plot_psd(frq_max: float, frq_good: np.ndarray, pwr_region_E_good: np.ndarray, pwr_region_I_good: np.ndarray) -> None:
+    """
+    Plots the power spectral density.
+
+    Parameters:
+    - frq_max (float): Maximum frequency.
+    - frq_good (np.ndarray): Frequency array.
+    - pwr_region_E_good (np.ndarray): Power spectral density for excitatory neurons.
+    - pwr_region_I_good (np.ndarray): Power spectral density for inhibitory neurons.
+    """
     fig, axes = plt.subplots(1, 1, figsize=(16, 8))
     plt.rcParams.update({'font.size': 14})
 
@@ -211,15 +288,29 @@ def plot_psd(frq_max, frq_good, pwr_region_E_good, pwr_region_I_good):
     plt.tight_layout()
     plt.show()
 
-def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.000315, 
-                      stimval = 0,stimdur = 50,stimtime_mean = 2500. ,stim_region = 5, n_nodes=68, 
-                      cut_transient=2000, run_sim=5000, nseed=10, additional_path_folder=''):
+def adjust_parameters(parameters: object, b_e: float = 5, tau_e: float = 5.0, tau_i: float = 5.0, Iext: float = 0.000315, stimval: float = 0, stimdur: float = 50, stimtime_mean: float = 2500.0, stim_region: int = 5, n_nodes: int = 68, cut_transient: int = 2000, run_sim: int = 5000, nseed: int = 10, additional_path_folder: str = '') -> object:
     """
-    assign the desired b_e, tau_e, tau_i, iext, stimval, stimdur, stim_region
-    if needed to change other parameters, it can be done manually
-    additional_path_folder : add in the form of 'Bold/' in case you are adding other monitors
-    """
+    Adjusts the parameters for the simulation.
 
+    Parameters:
+    - parameters (object): Parameters object.
+    - b_e (float): b_e value.
+    - tau_e (float): tau_e value.
+    - tau_i (float): tau_i value.
+    - Iext (float): External input value.
+    - stimval (float): Stimulation value.
+    - stimdur (float): Stimulation duration.
+    - stimtime_mean (float): Mean stimulation time.
+    - stim_region (int): Stimulation region.
+    - n_nodes (int): Number of nodes.
+    - cut_transient (int): Transient cut time.
+    - run_sim (int): Simulation run time.
+    - nseed (int): Number of seeds.
+    - additional_path_folder (str): Additional path folder.
+
+    Returns:
+    - object: Adjusted parameters object.
+    """
     if stimval:
         folder_root= './TVB/result/evoked'
         sim_name =  f"stim_{stimval}_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
@@ -259,28 +350,26 @@ def adjust_parameters(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.00
 
     return parameters
 
-def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, tau_i = 5.0, 
-               Iext = 0.000315,nseed=10, vars_int = ['E', 'I', 'W_e'], additional_path_folder=''):
-    '''
-    return the result of the simulation between the wanted time
-    :parameters: the parameter variable
-    :time_begin: the start time for the result (basically to discard cut_transient)
-    :time_end:  the ending time for the result
-    :vars_int: the variables of interest to load
-     for AdEx:
-        'E': excitatory FR
-        'I': inhibitory FR
-        'C_ee': covariance exc
-        'C_ei': covariance exc-inh
-        'C_ii': covariance inh
-        'W_e': adaptatioin exc
-        'W_i': adaptation inh
-        'noise': noise 
-    :return: result of all monitor
-        it will be a list with length equal to the monitors
-        each element of the list will be an array containing the variables of interest
-        this array will have shape (var_int, time, n_nodes)
-    '''
+def get_result(parameters: object, time_begin: float, time_end: float, prints: int = 0, b_e: float = 5, tau_e: float = 5.0, tau_i: float = 5.0, Iext: float = 0.000315, nseed: int = 10, vars_int: list = ['E', 'I', 'W_e'], additional_path_folder: str = '') -> tuple:
+    """
+    Gets the result of the simulation between the specified time range.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - time_begin (float): Start time for the result.
+    - time_end (float): End time for the result.
+    - prints (int): Print flag.
+    - b_e (float): b_e value.
+    - tau_e (float): tau_e value.
+    - tau_i (float): tau_i value.
+    - Iext (float): External input value.
+    - nseed (int): Number of seeds.
+    - vars_int (list): Variables of interest.
+    - additional_path_folder (str): Additional path folder.
+
+    Returns:
+    - tuple: Result of all monitors and explanation tuple.
+    """
     folder_root = './TVB/result/synch'
     sim_name =  f"_b_e_{b_e}_tau_e_{tau_e}_tau_i_{tau_i}_Iext_{Iext}_El_e_{parameters.parameter_model['E_L_e']}_El_i_{parameters.parameter_model['E_L_i']}_nseed_{nseed}"
     
@@ -346,11 +435,15 @@ def get_result(parameters,time_begin,time_end, prints=0, b_e = 5, tau_e = 5.0, t
     # access_results(parameter_monitor,vars_int,shape)
     return result, (parameter_monitor,vars_int,shape)
 
-def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
+def access_results(for_explan: tuple, bvals: list, tau_es: list, change_of: str = 'tau_e') -> None:
     """
-    print how the results are indexed
-    result = this array will have shape (var_int, time, n_nodes)
+    Prints how the results are indexed.
 
+    Parameters:
+    - for_explan (tuple): Explanation tuple.
+    - bvals (list): List of b values.
+    - tau_es (list): List of tau_e values.
+    - change_of (str): Parameter to change.
     """
     (parameter_monitor,vars_int,shape) = for_explan
 
@@ -380,56 +473,76 @@ def access_results(for_explan, bvals, tau_es, change_of='tau_e'):
 
     print(f'\nThese arrays have shape: time_points x number_of_nodes: {shape}')
 
-def get_np_arange(value):
-   """
-   solution to input np.arange in the argparser 
-   """
-   try:
-       values = [float(i) for i in value.split(',')]
-       assert len(values) in (1, 3)
-   except (ValueError, AssertionError):
-       raise argparse.ArgumentTypeError(
-           'Provide a CSV list of 1 or 3 integers'
-       )
-
-   # return our value as is if there is only one
-   if len(values) == 1:
-       return np.array(values)
-
-   # if there are three - return a range
-   return np.arange(*values)
-
-def get_np_linspace(value):
-   """
-   solution to input np.arange in the argparser 
-   """
-   try:
-       values = [float(i) for i in value.split(',')]
-       assert len(values) in (1, 3)
-   except (ValueError, AssertionError):
-       raise argparse.ArgumentTypeError(
-           'Provide a CSV list of 1 or 3 integers'
-       )
-
-   # return our value as is if there is only one
-   if len(values) == 1:
-       return np.array(values)
-
-   # if there are three - return a range
-   values[-1] = int(values[-1])
-   return np.linspace(*values)
-
-def create_dicts(parameters,param, result, monitor, for_explan, var_select, change_of='tau_e', 
-               Iext = 0.000315,nseed=10, additional_path_folder='', return_TR=False):
+def get_np_arange(value: str) -> np.ndarray:
     """
-    parameters: the parameters of the model
-    param : tuple, in the form of (i, [b_e, tau])
-    result: the result with all the parametrizations, and the selected monitors and selected variables
-    monitor: the selected monitor (string)
-    for_explan: tuple, from the get_result function, to catch all the monitors that have been used in the get_result (parameter_monitor,vars_int,Nnodes)
-    var_select: the variables to be plotted
-    change_of: str, 'tau_e' if you change values of tau_e, 'tau_i' otherwise
-    return a dictionary with key the selected variables, 
+    Converts a CSV list of 1 or 3 integers to a numpy array.
+
+    Parameters:
+    - value (str): CSV list of 1 or 3 integers.
+
+    Returns:
+    - np.ndarray: Numpy array.
+    """
+    try:
+       values = [float(i) for i in value.split(',')]
+       assert len(values) in (1, 3)
+    except (ValueError, AssertionError):
+       raise argparse.ArgumentTypeError(
+           'Provide a CSV list of 1 or 3 integers'
+       )
+
+   # return our value as is if there is only one
+    if len(values) == 1:
+        return np.array(values)
+
+   # if there are three - return a range
+    return np.arange(*values)
+
+def get_np_linspace(value: str) -> np.ndarray:
+    """
+    Converts a CSV list of 1 or 3 integers to a numpy array using linspace.
+
+    Parameters:
+    - value (str): CSV list of 1 or 3 integers.
+
+    Returns:
+    - np.ndarray: Numpy array.
+    """
+    try:
+        values = [float(i) for i in value.split(',')]
+        assert len(values) in (1, 3)
+    except (ValueError, AssertionError):
+        raise argparse.ArgumentTypeError(
+            'Provide a CSV list of 1 or 3 integers'
+        )
+
+   # return our value as is if there is only one
+    if len(values) == 1:
+        return np.array(values)
+
+    # if there are three - return a range
+    values[-1] = int(values[-1])
+    return np.linspace(*values)
+
+def create_dicts(parameters: object, param: tuple, result: list, monitor: str, for_explan: tuple, var_select: list, change_of: str = 'tau_e', Iext: float = 0.000315, nseed: int = 10, additional_path_folder: str = '', return_TR: bool = False) -> dict:
+    """
+    Creates dictionaries for the selected variables.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - param (tuple): Parameter tuple.
+    - result (list): Result list.
+    - monitor (str): Selected monitor.
+    - for_explan (tuple): Explanation tuple.
+    - var_select (list): Variables to be plotted.
+    - change_of (str): Parameter to change.
+    - Iext (float): External input value.
+    - nseed (int): Number of seeds.
+    - additional_path_folder (str): Additional path folder.
+    - return_TR (bool): Whether to return TR.
+
+    Returns:
+    - dict: Dictionary with selected variables.
     """
     #Take the parameters of interest
     (i, [b_e, tau_e]) = param
@@ -480,10 +593,25 @@ def create_dicts(parameters,param, result, monitor, for_explan, var_select, chan
     else:
         return result_fin
 
-def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,cut_transient, run_sim, change_of='tau_e', 
-               Iext = 0.000315,nseed=10, additional_path_folder='',figsize=(8,5), desired_time=0):
+def plot_tvb_results(parameters: object, params: list, result: list, monitor: str, for_explan: tuple, var_select: list, cut_transient: int, run_sim: int, change_of: str = 'tau_e', Iext: float = 0.000315, nseed: int = 10, additional_path_folder: str = '', figsize: tuple = (8, 5), desired_time: int = 0) -> None:
     """
-    desired_time: in s, plot from a specific time point
+    Plots TVB results.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - params (list): List of parameters.
+    - result (list): Result list.
+    - monitor (str): Selected monitor.
+    - for_explan (tuple): Explanation tuple.
+    - var_select (list): Variables to be plotted.
+    - cut_transient (int): Transient cut time.
+    - run_sim (int): Simulation run time.
+    - change_of (str): Parameter to change.
+    - Iext (float): External input value.
+    - nseed (int): Number of seeds.
+    - additional_path_folder (str): Additional path folder.
+    - figsize (tuple): Figure size.
+    - desired_time (int): Desired time point for plotting.
     """
     rows =int(len(params))
     cols = len(var_select) 
@@ -566,7 +694,22 @@ def plot_tvb_results(parameters,params, result, monitor, for_explan, var_select,
     plt.tight_layout()
     plt.show()
 
-def calculate_PCI(parameters, n_seeds, run_sim, cut_transient, stimval=1e-3, b_e=5, tau_e=5.0, tau_i=5.0, Iext=0.000315, n_trials = 5 ):
+def calculate_PCI(parameters: object, n_seeds: int, run_sim: int, cut_transient: int, stimval: float = 1e-3, b_e: float = 5, tau_e: float = 5.0, tau_i: float = 5.0, Iext: float = 0.000315, n_trials: int = 5) -> None:
+    """
+    Calculates the Perturbational Complexity Index (PCI).
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - n_seeds (int): Number of seeds.
+    - run_sim (int): Simulation run time.
+    - cut_transient (int): Transient cut time.
+    - stimval (float): Stimulation value.
+    - b_e (float): b_e value.
+    - tau_e (float): tau_e value.
+    - tau_i (float): tau_i value.
+    - Iext (float): External input value.
+    - n_trials (int): Number of trials.
+    """
     # Perturbational Complexity Index (PCI) computation and saving
     # number of independent random seeds and simulations
     # n_trials: number of simulations/realisations to analyse for one PCI value
@@ -668,7 +811,18 @@ def calculate_PCI(parameters, n_seeds, run_sim, cut_transient, stimval=1e-3, b_e
     clear_output(wait=False)
     print(f"Done: b_e={b_e}, tau_e={tau_e}, tau_i={tau_i}", flush=True)
 
-def sim_init(parameters, initial_condition=None, my_seed = 10):
+def sim_init(parameters: object, initial_condition: np.ndarray = None, my_seed: int = 10) -> object:
+    """
+    Initializes the simulator with parameters.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - initial_condition (np.ndarray): Initial condition array.
+    - my_seed (int): Seed value.
+
+    Returns:
+    - object: Initialized simulator.
+    """
     '''
     Initialise the simulator with parameter
 
@@ -959,7 +1113,17 @@ def sim_init(parameters, initial_condition=None, my_seed = 10):
         # end edit
     return simulator
 
-def print_dict_differences(dict1, dict2):
+def print_dict_differences(dict1: dict, dict2: dict) -> bool:
+    """
+    Prints differences between two dictionaries.
+
+    Parameters:
+    - dict1 (dict): First dictionary.
+    - dict2 (dict): Second dictionary.
+
+    Returns:
+    - bool: True if no differences, False otherwise.
+    """
     # Iterate through keys of the first dictionary
     for key in dict1:
         # Check if the key exists in the second dictionary
@@ -981,9 +1145,16 @@ def print_dict_differences(dict1, dict2):
             no_diff=False
     return no_diff
 
-def compare_dicts(dict1, dict2):
+def compare_dicts(dict1: dict, dict2: dict) -> bool:
     """
-    Compare two dictionaries for equality.
+    Compares two dictionaries for equality.
+
+    Parameters:
+    - dict1 (dict): First dictionary.
+    - dict2 (dict): Second dictionary.
+
+    Returns:
+    - bool: True if equal, False otherwise.
     """
     if len(dict1) != len(dict2):
         return False
@@ -996,19 +1167,26 @@ def compare_dicts(dict1, dict2):
     
     return True
 
-def run_simulation_all(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.000315, 
-                      stimval = 0,stimdur = 50,stimtime_mean = 2500 ,stim_region = 5, n_nodes=68, 
-                      cut_transient=2000, run_sim=5000, nseed=10, additional_path_folder=''):
-                      
-    #                   parameters, b_e = b_e, tau_e = tau_e , n_nodes=Nnodes,
-    # cut_transient=cut_transient, run_sim=run_sim, additional_path_folder='Bold/', time, parameter_simulation,parameter_monitor):
-    '''
-    run a simulation
-    :param simulator: the simulator already initialize
-    :param time: the time of simulation
-    :param parameter_simulation: the parameter for the simulation
-    :param parameter_monitor: the parameter for the monitor
-    '''
+def run_simulation_all(parameters: object, b_e: float = 5, tau_e: float = 5.0, tau_i: float = 5.0, Iext: float = 0.000315, stimval: float = 0, stimdur: float = 50, stimtime_mean: float = 2500, stim_region: int = 5, n_nodes: int = 68, cut_transient: int = 2000, run_sim: int = 5000, nseed: int = 10, additional_path_folder: str = '') -> None:
+    """
+    Runs a simulation with the specified parameters.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - b_e (float): b_e value.
+    - tau_e (float): tau_e value.
+    - tau_i (float): tau_i value.
+    - Iext (float): External input value.
+    - stimval (float): Stimulation value.
+    - stimdur (float): Stimulation duration.
+    - stimtime_mean (float): Mean stimulation time.
+    - stim_region (int): Stimulation region.
+    - n_nodes (int): Number of nodes.
+    - cut_transient (int): Transient cut time.
+    - run_sim (int): Simulation run time.
+    - nseed (int): Number of seeds.
+    - additional_path_folder (str): Additional path folder.
+    """
     print('Adjust Parameters')
     parameters = adjust_parameters(parameters, b_e = b_e, tau_e = tau_e, tau_i = tau_i, Iext = Iext, stimval = stimval,
                                    stimdur = stimdur,stimtime_mean = stimtime_mean ,stim_region = stim_region, n_nodes=n_nodes, 
@@ -1054,29 +1232,55 @@ def run_simulation_all(parameters, b_e = 5, tau_e = 5.0, tau_i = 5.0, Iext = 0.0
     clear_output(wait=True)
     print(f"Simulation Completed successfully", flush=True)
 
-def butter_bandpass(lowend, highend, TR, order=5):
-        fnq = 0.5/ TR 
-        Wn = [lowend / fnq, highend / fnq]
-        sos = butter(order,Wn, analog=False, btype='band', output='sos')
-        return sos
-
-def butter_bandpass_filter(data, lowcut, highcut, TR, order=5):
-        sos = butter_bandpass(lowcut, highcut, TR, order=order)
-        y = sosfilt(sos, data)
-        return y
-
-def bandpass_timeseries(ts, TR, lowend=0.04, highend=0.07, order = 5):
+def butter_bandpass(lowend: float, highend: float, TR: float, order: int = 5) -> np.ndarray:
     """
-    Bandpass BOLD signal timeseries
+    Designs a Butterworth bandpass filter.
 
     Parameters:
-    - ts: BOLD signal data with shape (N, T)
-    - TR: repetition time in seconds
-    - lowend: lowest frequency in Hz; default 0.008
-    - highend: highest frequency in Hz; default 0.09
+    - lowend (float): Low end of the bandpass.
+    - highend (float): High end of the bandpass.
+    - TR (float): Repetition time.
+    - order (int): Filter order.
 
     Returns:
-    - filtered_timeseries: bandpass-filtered timeseries with shape (N, T)
+    - np.ndarray: Second-order sections representation of the filter.
+    """
+    fnq = 0.5/ TR 
+    Wn = [lowend / fnq, highend / fnq]
+    sos = butter(order,Wn, analog=False, btype='band', output='sos')
+    return sos
+
+def butter_bandpass_filter(data: np.ndarray, lowcut: float, highcut: float, TR: float, order: int = 5) -> np.ndarray:
+    """
+    Applies a Butterworth bandpass filter to the data.
+
+    Parameters:
+    - data (np.ndarray): Input data.
+    - lowcut (float): Low cut-off frequency.
+    - highcut (float): High cut-off frequency.
+    - TR (float): Repetition time.
+    - order (int): Filter order.
+
+    Returns:
+    - np.ndarray: Filtered data.
+    """
+    sos = butter_bandpass(lowcut, highcut, TR, order=order)
+    y = sosfilt(sos, data)
+    return y
+
+def bandpass_timeseries(ts: np.ndarray, TR: float, lowend: float = 0.04, highend: float = 0.07, order: int = 5) -> np.ndarray:
+    """
+    Bandpass filters BOLD signal timeseries.
+
+    Parameters:
+    - ts (np.ndarray): BOLD signal data.
+    - TR (float): Repetition time.
+    - lowend (float): Lowest frequency.
+    - highend (float): Highest frequency.
+    - order (int): Filter order.
+
+    Returns:
+    - np.ndarray: Bandpass-filtered timeseries.
     """
     filtered_timeseries = np.zeros_like(ts, dtype=float)
 
@@ -1086,9 +1290,17 @@ def bandpass_timeseries(ts, TR, lowend=0.04, highend=0.07, order = 5):
     
     return filtered_timeseries
 
-def preprocess_bold(ts, TR, apply_bandpass_YN=True):
+def preprocess_bold(ts: np.ndarray, TR: float, apply_bandpass_YN: bool = True) -> np.ndarray:
     """
-    ts: time series in the shape (nodes, time_points)
+    Preprocesses BOLD signal timeseries.
+
+    Parameters:
+    - ts (np.ndarray): BOLD signal data.
+    - TR (float): Repetition time.
+    - apply_bandpass_YN (bool): Whether to apply bandpass filter.
+
+    Returns:
+    - np.ndarray: Preprocessed timeseries.
     """
     # Get the dimensions of the BOLD signal data
     # ts=ts.T
@@ -1105,8 +1317,18 @@ def preprocess_bold(ts, TR, apply_bandpass_YN=True):
         # Zscored_timeseries[roi, :] =(ts[roi, :] - np.mean(ts[roi, :])) / np.std(ts[roi, :])
     return Zscored_timeseries
 
-def corr_sc_fc(BOLD_signal, TR, SC):
+def corr_sc_fc(BOLD_signal: np.ndarray, TR: float, SC: np.ndarray) -> tuple:
+    """
+    Calculates the correlation between structural and functional connectivity.
 
+    Parameters:
+    - BOLD_signal (np.ndarray): BOLD signal data.
+    - TR (float): Repetition time.
+    - SC (np.ndarray): Structural connectivity matrix.
+
+    Returns:
+    - tuple: Functional connectivity matrix and correlation coefficient.
+    """
     signal = preprocess_bold(BOLD_signal, TR, apply_bandpass_YN=False) #check the shape, maybe you need to T
     # signal= BOLD_signal
     FC=np.corrcoef(signal.T)
@@ -1116,10 +1338,26 @@ def corr_sc_fc(BOLD_signal, TR, SC):
 
     return FC, coef
 
-def plot_FC_SC(parameters,params, result,  for_explan, cut_transient, run_sim,SC, var_select = 'E', monitor = 'Bold', change_of='tau_e', 
-               Iext = 0.000315,nseed=10, additional_path_folder='',figsize=(8,5), desired_time=0):
+def plot_FC_SC(parameters: object, params: list, result: list, for_explan: tuple, cut_transient: int, run_sim: int, SC: np.ndarray, var_select: str = 'E', monitor: str = 'Bold', change_of: str = 'tau_e', Iext: float = 0.000315, nseed: int = 10, additional_path_folder: str = '', figsize: tuple = (8, 5), desired_time: int = 0) -> None:
     """
-    desired_time: in s, plot from a specific time point
+    Plots the functional and structural connectivity.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - params (list): List of parameters.
+    - result (list): Result list.
+    - for_explan (tuple): Explanation tuple.
+    - cut_transient (int): Transient cut time.
+    - run_sim (int): Simulation run time.
+    - SC (np.ndarray): Structural connectivity matrix.
+    - var_select (str): Variable to select.
+    - monitor (str): Selected monitor.
+    - change_of (str): Parameter to change.
+    - Iext (float): External input value.
+    - nseed (int): Number of seeds.
+    - additional_path_folder (str): Additional path folder.
+    - figsize (tuple): Figure size.
+    - desired_time (int): Desired time point for plotting.
     """
     rows =int(len(params))
     cols = 2 
@@ -1169,29 +1407,22 @@ def plot_FC_SC(parameters,params, result,  for_explan, cut_transient, run_sim,SC
     plt.tight_layout()
     plt.show()
 
-def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='./network_sims/', 
-                            BIN = 5, AmpStim = 1,offset_index= 61, load_until = 399  ):
+def calculate_survival_time(bvals: list, tau_values: list, tau_i_iter: bool, Nseeds: list, save_path: str ='./network_sims/', BIN: int = 5, AmpStim: float = 1, offset_index: int = 61, load_until: int = 399) -> None:
     """
-    calculate the survival time
+    Calculates the survival time.
 
-    bvals : values of b_e, list or array
-    tau_values : values of tau_e (then tau_i_iter=False) or tau_i (then tau_i_iter=True)
-    tau_i_iter: (bool) True for iterating the tau_i
-    Nseeds: list or array
-    path: where the network sims were saved
-    BIN: int,  used for the saving / binning of network simulations
-    AmpStim: float, the amplitude of the kick
-    offset_index: int, time that the stimulus stops : (time_of_peek + plateau + BIN)/BIN
-    load_until: int, to make sure that you load the same length of all the arrays (here duration/BIN)
+    Parameters:
+    - bvals (list): Values of b_e.
+    - tau_values (list): Values of tau_e or tau_i.
+    - tau_i_iter (bool): True for iterating the tau_i.
+    - Nseeds (list): List of seeds.
+    - save_path (str): Path where the network sims were saved.
+    - BIN (int): Used for the saving / binning of network simulations.
+    - AmpStim (float): Amplitude of the kick.
+    - offset_index (int): Time that the stimulus stops.
+    - load_until (int): To make sure that you load the same length of all the arrays.
 
-    the result is an array with shape (tau_vals, bvals) which contains the average survival time for
-    each combination of tau/b_e
-
-    original values for the script:
-    bvals = np.arange(0,30,step=1)
-    tauEv = np.arange(5.,7.,step=10)
-    tauIv= np.arange(3.,9.,step=0.1)
-    Nseeds = np.arange(0,100,5)
+    The result is an array with shape (tau_vals, bvals) which contains the average survival time for each combination of tau/b_e.
     """
     if tau_i_iter:
         tauv = tau_values
@@ -1271,7 +1502,18 @@ def calculate_survival_time(bvals, tau_values, tau_i_iter, Nseeds, save_path ='.
     print("Done! Saved in :", save_path)
     print(mean_array.shape)
 
-def load_survival( load = 'tau_e', precalc=False, save_path = './'):
+def load_survival(load: str = 'tau_e', precalc: bool = False, save_path: str = './') -> tuple:
+    """
+    Loads the survival time data.
+
+    Parameters:
+    - load (str): Parameter to load ('tau_e' or 'tau_i').
+    - precalc (bool): Whether to load pre-calculated data.
+    - save_path (str): Path to save the data.
+
+    Returns:
+    - tuple: Mean array, taus, bthr, tau_v, bvals.
+    """
     if precalc:
         if load == 'tau_e':
             mean_array = np.load('./Dyn_Analysis/dynamical_precalc/tau_e_mean_array.npy')
@@ -1299,8 +1541,22 @@ def load_survival( load = 'tau_e', precalc=False, save_path = './'):
             taus = [i for i in taus if i <= tau_v.max()]
     return mean_array,taus, bthr, tau_v, bvals
 
-def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_path = './' , precalc =False, save_im=False, **kwargs):
-    
+def plot_heatmap_survival(mean_array: np.ndarray, tauis: list, tau_v: np.ndarray, bvals: np.ndarray, bthr: list, load: str, file_path: str = './', precalc: bool = False, save_im: bool = False, **kwargs) -> None:
+    """
+    Plots the heatmap of survival time.
+
+    Parameters:
+    - mean_array (np.ndarray): Mean array.
+    - tauis (list): List of tau values.
+    - tau_v (np.ndarray): Tau values.
+    - bvals (np.ndarray): b values.
+    - bthr (list): List of b threshold values.
+    - load (str): Parameter to load ('tau_e' or 'tau_i').
+    - file_path (str): Path to save the image.
+    - precalc (bool): Whether to load pre-calculated data.
+    - save_im (bool): Whether to save the image.
+    - kwargs: Additional arguments.
+    """
     default_args = {'z_min': mean_array.min(), 'z_max': mean_array.max(), 'colorscale': None, 'line_color':'white', 'markers':False, 'mark_1':(0,0), 'mark_2':(0,0)}
 
     #update arguments
@@ -1436,7 +1692,17 @@ def plot_heatmap_survival(mean_array, tauis, tau_v, bvals , bthr, load ,file_pat
 
     fig.show()
 
-def load_network_mean(CELLS, path_net):
+def load_network_mean(CELLS: str, path_net: str) -> tuple:
+    """
+    Loads the network mean.
+
+    Parameters:
+    - CELLS (str): Cell type.
+    - path_net (str): Path to the network.
+
+    Returns:
+    - tuple: Network mean and inputs.
+    """
         #load network
     fr_inh=[]
     fr_exc=[]
@@ -1456,7 +1722,20 @@ def load_network_mean(CELLS, path_net):
 
     return fr_both, inputs
 
-def calculate_mf_difference(CELLS, fr_both, inputs, PRS, PFS):
+def calculate_mf_difference(CELLS: str, fr_both: np.ndarray, inputs: np.ndarray, PRS: object, PFS: object) -> float:
+    """
+    Calculates the mean field difference.
+
+    Parameters:
+    - CELLS (str): Cell type.
+    - fr_both (np.ndarray): Network mean.
+    - inputs (np.ndarray): Inputs.
+    - PRS (object): PRS object.
+    - PFS (object): PFS object.
+
+    Returns:
+    - float: Mean field difference.
+    """
     mean_both =[]
     for AmpStim in inputs:
         mean_exc, mean_inh = run_MF(CELLS, AmpStim, PRS, PFS, Iext=0, TotTime=2)
@@ -1475,15 +1754,20 @@ def calculate_mf_difference(CELLS, fr_both, inputs, PRS, PFS):
 
     return dif 
 
-def box_and_whisker(data, palette,medianprops,meanpprops, axes, COLOR= None, widths = 0.6, ANNOT=False):
+def box_and_whisker(data: list, palette: str, medianprops: dict, meanpprops: dict, axes: object, COLOR: str = None, widths: float = 0.6, ANNOT: bool = False) -> None:
     """
-    This is for the normal boxplot:
-    data: list of PCI values - usually for one stimulus and multiple conditions
-    meadian and mean props for the boxplots : dictionaries
-    COLOR: if given (string) all the boxes will have this color
-    ANNOT: if True the sample size will be displayed
-    """
+    Creates a box and whisker plot.
 
+    Parameters:
+    - data (list): List of PCI values.
+    - palette (str): Color palette.
+    - medianprops (dict): Median properties.
+    - meanpprops (dict): Mean properties.
+    - axes (object): Axes for plotting.
+    - COLOR (str): Color of the boxes.
+    - widths (float): Width of the boxes.
+    - ANNOT (bool): Whether to annotate sample size.
+    """
     bp = axes.boxplot(data, widths=widths, medianprops=medianprops,
                       meanprops=meanpprops,showmeans=True, meanline=False,patch_artist=True)
     
@@ -1559,23 +1843,31 @@ def box_and_whisker(data, palette,medianprops,meanpprops, axes, COLOR= None, wid
             sample_size = len(dataset)
             axes.text(i + 1, bottom, fr'n = {sample_size}', ha='center', size='small')
 
-def custom_sort(item):
+def custom_sort(item: tuple) -> float:
     """
-    Sort according to absolute difference
-    Used in stats_rain so that the longer stat bars will be higher 
+    Sorts according to absolute difference.
+
+    Parameters:
+    - item (tuple): Item to sort.
+
+    Returns:
+    - float: Absolute difference.
     """
     return abs(item[0][0] - item[0][1])
 
-def stats_rain(df, ax, val_col='PCI', group_col='cond'):
+def stats_rain(df: pd.DataFrame, ax: object, val_col: str = 'PCI', group_col: str = 'cond') -> object:
     """
-    Adds statistical annotation in the boxplot of the raincloud plot
-    It runs post hoc conover tests
+    Adds statistical annotation in the boxplot of the raincloud plot.
 
-    df : the dataset, make sure that it refers to one stim 
-    val_col : the column with the values to be analysed (PCI)
-    group_col : for which conditions (cond)
+    Parameters:
+    - df (pd.DataFrame): Dataset.
+    - ax (object): Axes for plotting.
+    - val_col (str): Column with the values to be analysed.
+    - group_col (str): Column for the conditions.
+
+    Returns:
+    - object: Axes with statistical annotation.
     """
-
     Post_hoc = sp.posthoc_conover(df, val_col=val_col, group_col=group_col, p_adjust='holm')
     num_groups = len(Post_hoc)
 
@@ -1663,17 +1955,19 @@ def stats_rain(df, ax, val_col='PCI', group_col='cond'):
 
     return ax
 
-def box_and_whisker_2(data, PCI_all,color_box, axes, zorder=100, widths = 0.08, ANNOT=False):
+def box_and_whisker_2(data: pd.DataFrame, PCI_all: list, color_box: str, axes: object, zorder: int = 100, widths: float = 0.08, ANNOT: bool = False) -> None:
     """
-    This is for the plot with the seeds with the lines:
-    data: the df columns of the conditions with the pci values
-    PCI_all : the list with the pci values (for the calculation of the statistics
-            it is better to use for one stimulus)
-    color_box: color of the box plots
-    z_order : order that the boxes will be plotted, put a high value to be on top of the lines
-    ANNOT: if True the sample size will be displayed
-    """
+    Creates a box and whisker plot with lines.
 
+    Parameters:
+    - data (pd.DataFrame): DataFrame columns of the conditions with the PCI values.
+    - PCI_all (list): List with the PCI values.
+    - color_box (str): Color of the box plots.
+    - axes (object): Axes for plotting.
+    - zorder (int): Order that the boxes will be plotted.
+    - widths (float): Width of the boxes.
+    - ANNOT (bool): Whether to annotate sample size.
+    """
     snsFig = sns.boxplot(data, showfliers=False, whis=0, \
         width=widths, ax=ax, medianprops={"color": color_box})
     for i,box in enumerate([p for p in snsFig.patches if not p.get_label()]): 
@@ -1741,8 +2035,20 @@ def box_and_whisker_2(data, PCI_all,color_box, axes, zorder=100, widths = 0.08, 
             sample_size = len(dataset)
             axes.text(i + 1, bottom, fr'n = {sample_size}', ha='center', size='small')
 
-def violin_and_whisker(data, palette,medianprops,meanpprops, axes, COLOR= None, widths = 0.6, ANNOT=False):
+def violin_and_whisker(data: list, palette: str, medianprops: dict, meanpprops: dict, axes: object, COLOR: str = None, widths: float = 0.6, ANNOT: bool = False) -> None:
+    """
+    Creates a violin and whisker plot.
 
+    Parameters:
+    - data (list): List of PCI values.
+    - palette (str): Color palette.
+    - medianprops (dict): Median properties.
+    - meanpprops (dict): Mean properties.
+    - axes (object): Axes for plotting.
+    - COLOR (str): Color of the boxes.
+    - widths (float): Width of the boxes.
+    - ANNOT (bool): Whether to annotate sample size.
+    """
 #     ax = plt.axes()
 #     bp = axes.violinplot(data, widths=widths,showmeans=True)
     
@@ -1811,7 +2117,16 @@ def violin_and_whisker(data, palette,medianprops,meanpprops, axes, COLOR= None, 
 
 #     plt.show()
 
-def convert_pvalue_to_asterisks(pvalue):
+def convert_pvalue_to_asterisks(pvalue: float) -> str:
+    """
+    Converts p-value to asterisks.
+
+    Parameters:
+    - pvalue (float): p-value.
+
+    Returns:
+    - str: Asterisks representing the significance level.
+    """
     if pvalue <= 0.0001:
         return "****"
     elif pvalue <= 0.001:
@@ -1822,7 +2137,14 @@ def convert_pvalue_to_asterisks(pvalue):
         return "*"
     return "ns"
 
-def calc_statistics(PCI_states, ax):
+def calc_statistics(PCI_states: list, ax: object) -> None:
+    """
+    Calculates statistics and adds significance bars.
+
+    Parameters:
+    - PCI_states (list): List of PCI values.
+    - ax (object): Axes for plotting.
+    """
     y_min, y_max = ax.get_ylim()
     Post_hoc=sp.posthoc_conover(PCI_states, p_adjust = 'holm') # the stat for the first
 
@@ -1845,7 +2167,24 @@ def calc_statistics(PCI_states, ax):
     ax.relim()
     ax.autoscale_view()
 
-def load_pci_results_pipeline(parameters, i_trials, n_trials, stimval=1e-3, b_e=5, Iext=0.000315, tau_e=5.0, tau_i=5.0, local_folder=False):
+def load_pci_results_pipeline(parameters: object, i_trials: int, n_trials: int, stimval: float = 1e-3, b_e: float = 5, Iext: float = 0.000315, tau_e: float = 5.0, tau_i: float = 5.0, local_folder: bool = False) -> dict:
+    """
+    Loads PCI results from the pipeline.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - i_trials (int): Number of trials.
+    - n_trials (int): Number of trials.
+    - stimval (float): Stimulation value.
+    - b_e (float): b_e value.
+    - Iext (float): External input value.
+    - tau_e (float): tau_e value.
+    - tau_i (float): tau_i value.
+    - local_folder (bool): Whether to load from local folder.
+
+    Returns:
+    - dict: PCI results.
+    """
     """
     local_folder: True if you want to take the lionel files from the local folder in the git repository (or also if you work from laptop)
     """
@@ -1878,7 +2217,18 @@ def load_pci_results_pipeline(parameters, i_trials, n_trials, stimval=1e-3, b_e=
 
     return data_curr
 
-def make_pci_dict(i_trials, n_trials,data_curr):
+def make_pci_dict(i_trials: int, n_trials: int, data_curr: dict) -> dict:
+    """
+    Creates a dictionary for PCI results.
+
+    Parameters:
+    - i_trials (int): Number of trials.
+    - n_trials (int): Number of trials.
+    - data_curr (dict): PCI results.
+
+    Returns:
+    - dict: PCI dictionary.
+    """
     seeds_arr  = (i_trials*n_trials)+np.arange(0,5,1)
 
     if i_trials==0:
@@ -1889,7 +2239,20 @@ def make_pci_dict(i_trials, n_trials,data_curr):
     
     return result_dict
 
-def create_PCI_all(parameters, params, n_trials=5, stimvals = [1e-5, 1e-4, 1e-3],local_folder=False):
+def create_PCI_all(parameters: object, params: list, n_trials: int = 5, stimvals: list = [1e-5, 1e-4, 1e-3], local_folder: bool = False) -> list:
+    """
+    Creates a list with the PCI values.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - params (list): List of parameters.
+    - n_trials (int): Number of trials.
+    - stimvals (list): List of stimulation values.
+    - local_folder (bool): Whether to load from local folder.
+
+    Returns:
+    - list: List with the PCI values.
+    """
     """
     it creates a list with the PCI values
 
@@ -1916,8 +2279,18 @@ def create_PCI_all(parameters, params, n_trials=5, stimvals = [1e-5, 1e-4, 1e-3]
     
     return PCI_all
 
-def create_dataset_for_raincloud(PCI_all, stimvals, conditions= ['wake', 'nmda', 'gaba', 'sleep'] ):
-    
+def create_dataset_for_raincloud(PCI_all: list, stimvals: list, conditions: list = ['wake', 'nmda', 'gaba', 'sleep']) -> pd.DataFrame:
+    """
+    Creates a dataset for raincloud plot.
+
+    Parameters:
+    - PCI_all (list): List with the PCI values.
+    - stimvals (list): List of stimulation values.
+    - conditions (list): List of conditions.
+
+    Returns:
+    - pd.DataFrame: DataFrame for raincloud plot.
+    """
     size_seeds = len(PCI_all[0][0])
     cond_count = len(conditions)
     
@@ -1948,9 +2321,25 @@ def create_dataset_for_raincloud(PCI_all, stimvals, conditions= ['wake', 'nmda',
 
     return df_small
 
-def plot_raincloud_with_stats(parameters, params, n_trials=5, stimvals=[1e-3], pick_stim=1, conditions= ['wake', 'nmda', 'gaba', 'sleep'],  
-                              colors = [ "steelblue", '#6d0a26', '#9b6369', '#c0b3b4'],
-                              dx='stim', dy='PCI', dhue='cond', ort='v', sigma=0.2, local_folder=False):
+def plot_raincloud_with_stats(parameters: object, params: list, n_trials: int = 5, stimvals: list = [1e-3], pick_stim: int = 1, conditions: list = ['wake', 'nmda', 'gaba', 'sleep'], colors: list = ["steelblue", '#6d0a26', '#9b6369', '#c0b3b4'], dx: str = 'stim', dy: str = 'PCI', dhue: str = 'cond', ort: str = 'v', sigma: float = 0.2, local_folder: bool = False) -> None:
+    """
+    Plots raincloud with statistics.
+
+    Parameters:
+    - parameters (object): Parameters object.
+    - params (list): List of parameters.
+    - n_trials (int): Number of trials.
+    - stimvals (list): List of stimulation values.
+    - pick_stim (int): Stimulus for which to compare.
+    - conditions (list): List of conditions.
+    - colors (list): List of colors.
+    - dx (str): x-axis variable.
+    - dy (str): y-axis variable.
+    - dhue (str): Hue variable.
+    - ort (str): Orientation.
+    - sigma (float): Bandwidth.
+    - local_folder (bool): Whether to load from local folder.
+    """
     """
     df
     pick_stim: the stimulus for which you will compare
@@ -2006,7 +2395,14 @@ def plot_raincloud_with_stats(parameters, params, n_trials=5, stimvals=[1e-3], p
         ax.invert_xaxis()
     plt.show()
 
-def plot_all_stimuli(df, sigma):
+def plot_all_stimuli(df: pd.DataFrame, sigma: float) -> None:
+    """
+    Plots all stimuli.
+
+    Parameters:
+    - df (pd.DataFrame): DataFrame.
+    - sigma (float): Bandwidth.
+    """
     colors = ["tan", "darkred", "steelblue"]
     pal = sns.color_palette(colors)
 
@@ -2030,7 +2426,17 @@ def plot_all_stimuli(df, sigma):
 
     plt.tight_layout()
 
-def string_create(kwargs, command):
+def string_create(kwargs: dict, command: str) -> list:
+    """
+    Creates a command string.
+
+    Parameters:
+    - kwargs (dict): Dictionary of keyword arguments.
+    - command (str): Command string.
+
+    Returns:
+    - list: Command list.
+    """
     # Convert dictionary to JSON string
     dkwargs_str = json.dumps(kwargs)
 
